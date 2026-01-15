@@ -29,6 +29,8 @@ public:
   Satellite& satelliteZ2() { return _satelliteZ2; }
   Satellite& satelliteZ3() { return _satelliteZ3; }
 
+  bool recupererNetworkID();
+
 private:
   FrisquetRadio& _radio;
   Config&        _cfg;

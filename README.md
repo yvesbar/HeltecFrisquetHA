@@ -12,10 +12,13 @@ de récupérer les informations en temps réel et de les exposer à **Home Assis
 - Récupération des informations chaudière :
   - Température **ECS (eau chaude sanitaire)**
   - Température **corps de chauffe (CDC)**
+  - Température **extérieure**
+  - **Pression** du circuit (bar)
   - **Consommation gaz** ECS et chauffage (veille)
   - **Affichage et séléction du mode ECS** (Max, Eco, Eco Horaires Eco+, Eco+ Horaires, Stop)
 - Gestion des **zones 1, 2 et 3** :
   - Température **départ eau**
+  - Température **ambiante** (si source Connect)
   - Température **consigne**
   - **Configuration des consignes** pour chaque mode :
     - Réduit
@@ -114,6 +117,13 @@ Avant le flash :
 
 Si une **DS18B20** est branchée, la température sera lue localement.
 Sinon, envoyez la température via MQTT (ex. depuis un capteur météo HA), soit en modifiant l'entité sur HA, soit en publiant sur le topic **“"frisquet/sondeExterieure/temperatureExterieure/set"”**. (si Base Topic est toujours par défault à "frisquet" )
+
+#### 🔹 Récupération du NetworkID (sans association)
+1. Sur la chaudière, lancez une **association** :
+   - soit une association Connect (ou remplacement)
+   - soit **Remplacer Satellite Z1**
+2. Sur le portail, cliquez sur **“Récupérer”** à côté du champ NetworkID.
+3. Une fois le NetworkID affiché, **annulez l’action** côté chaudière.
 
 ---
 

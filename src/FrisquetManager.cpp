@@ -1,4 +1,5 @@
 #include "FrisquetManager.h"
+#include "Buffer.h"
 
 FrisquetManager::FrisquetManager(FrisquetRadio &radio, Config &cfg, MqttManager &mqtt)
     :   _radio(radio), _cfg(cfg), _mqtt(mqtt),
@@ -199,4 +200,50 @@ void FrisquetManager::onRadioReceive()
     }
 
     FrisquetRadio::interruptReceive = false;
+}
+
+
+bool FrisquetManager::recupererNetworkID() {
+    byte buff[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
+    size_t buffLength = 0;
+    int16_t err;
+    
+    radio().setNetworkID({0xFF, 0xFF, 0xFF, 0xFF}); // Broadcast
+
+    uint8_t retry = 0;
+    unsigned long timeout = millis() + 30000;
+    do {
+        err = radio().receive(buff, 0);
+        if(err != RADIOLIB_ERR_NONE) {
+            continue;
+        }
+
+        buffLength = radio().getPacketLength(); 
+        if (buffLength != 11) {
+            continue;
+        }
+
+        struct {
+            FrisquetRadio::RadioTrameHeader header;
+            uint8_t length;
+            NetworkID networkID;
+        } donnees;
+
+        logRadio(true, (byte*)buff, buffLength);
+
+        ReadBuffer readBuffer = ReadBuffer(buff, buffLength);
+        readBuffer.getBytes((byte*)&donnees, sizeof(donnees));
+
+        if(donnees.header.idExpediteur == ID_CHAUDIERE && donnees.header.type == FrisquetRadio::MessageType::ASSOCIATION) {
+            info("[DEVICE] Réception trame d'association");
+            info("[DEVICE] Récupération du NetworkID : %s.", byteArrayToHexString((byte*)&donnees.networkID, sizeof(NetworkID)).c_str());
+            
+            config().setNetworkID(donnees.networkID);
+            radio().setNetworkID(donnees.networkID);
+            config().save();
+            return true;
+        }
+    } while(millis() < timeout);
+
+    return false;
 }

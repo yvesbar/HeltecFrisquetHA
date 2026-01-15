@@ -145,6 +145,7 @@ void Portal::begin(bool startApFallbackIfNoWifi) {
   _srv.on("/api/satellite/z1/pair", HTTP_POST, [this]{ handlePairSatelliteZ1(); });
   _srv.on("/api/satellite/z2/pair", HTTP_POST, [this]{ handlePairSatelliteZ2(); });
   _srv.on("/api/satellite/z3/pair", HTTP_POST, [this]{ handlePairSatelliteZ3(); });
+  _srv.on("/api/network-id/recup", HTTP_POST, [this]{ handleRecupNetworkId(); });
 
 
   _srv.onNotFound([this](){
@@ -1019,6 +1020,29 @@ void Portal::handlePairSatelliteZ3() {
   }
 }
 
+void Portal::handleRecupNetworkId() {
+  if (_srv.method() != HTTP_POST) {
+    _srv.send(405, "application/json; charset=utf-8",
+              "{\"ok\":false,\"err\":\"Méthode non autorisée\"}");
+    return;
+  }
+
+  info("[PORTAIL] Demande de récupération du NetworkID");
+
+  if (_frisquetManager.recupererNetworkID()) {
+    const NetworkID& nid = _frisquetManager.config().getNetworkID();
+    String json = "{";
+    json += "\"ok\":true,";
+    json += "\"networkID\":\"" + jsonEscape(networkIdToStr(nid)) + "\",";
+    json += "\"msg\":\"NetworkID récupéré\"";
+    json += "}";
+    _srv.send(200, "application/json; charset=utf-8", json);
+  } else {
+    _srv.send(500, "application/json; charset=utf-8",
+              "{\"ok\":false,\"err\":\"Échec récupération NetworkID\"}");
+  }
+}
+
 
 // -------------------- Utils --------------------
 
@@ -1065,6 +1089,8 @@ String Portal::html() {
   .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
   .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.2)}
   .row{display:flex;flex-direction:column;gap:6px}
+  .row-inline{display:flex;gap:8px;align-items:center}
+  .row-inline input{flex:1}
   label{font-weight:600}
   .hint{color:var(--muted);font-size:12px}
   input[type=text],input[type=password],input[type=number],select{
@@ -1176,7 +1202,12 @@ String Portal::html() {
           <hr />
           <div class='row' style='margin-bottom:10px'>
             <label>NetworkID</label>
-            <input id='networkID' type='text' placeholder='00:00:00:00'>
+            <div class='row-inline'>
+              <input id='networkID' type='text' placeholder='00:00:00:00'>
+              <button type='button' class='btn btn-sm' id='btnRecupNetworkID'>
+                Récupérer
+              </button>
+            </div>
             <div class='hint'>
               Identifiant réseau au format <code>AA:BB:CC:DD</code>.
             </div>
@@ -1602,6 +1633,23 @@ async function pairSatellite(zone) {
   }
 }
 
+async function recupNetworkId() {
+  try {
+    msg("Récupération du NetworkID…");
+    const r = await fetch("/api/network-id/recup", { method:"POST" });
+    const j = await r.json();
+    if (j.ok) {
+      const input = $("#networkID");
+      if (input && j.networkID) input.value = j.networkID;
+      msg(j.msg || "NetworkID récupéré.");
+    } else {
+      msg("Erreur récupération NetworkID : " + (j.err || "inconnue"));
+    }
+  } catch (e) {
+    msg("Erreur réseau lors de la récupération du NetworkID.");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", ()=>{
   // Toggle password
   document.querySelectorAll('[data-toggle]').forEach(btn=>{
@@ -1649,12 +1697,14 @@ document.addEventListener("DOMContentLoaded", ()=>{
   const btnPairSatZ1   = $("#btnPairSatZ1");
   const btnPairSatZ2   = $("#btnPairSatZ2");
   const btnPairSatZ3   = $("#btnPairSatZ3");
+  const btnRecupNetworkId = $("#btnRecupNetworkID");
 
   if (btnPairConnect) btnPairConnect.addEventListener("click", pairConnect);
   if (btnPairSonde)   btnPairSonde.addEventListener("click", pairSondeExt);
   if (btnPairSatZ1)   btnPairSatZ1.addEventListener("click", ()=>pairSatellite("1"));
   if (btnPairSatZ2)   btnPairSatZ2.addEventListener("click", ()=>pairSatellite("2"));
   if (btnPairSatZ3)   btnPairSatZ3.addEventListener("click", ()=>pairSatellite("3"));
+  if (btnRecupNetworkId) btnRecupNetworkId.addEventListener("click", recupNetworkId);
 
   loadConfig();
   const scheduleStatusRefresh = async () => {

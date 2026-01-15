@@ -44,6 +44,7 @@ private:
   void handlePairSatelliteZ1();
   void handlePairSatelliteZ2();
   void handlePairSatelliteZ3();
+  void handleRecupNetworkId();
 
 
   // Utils
