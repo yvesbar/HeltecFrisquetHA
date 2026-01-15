@@ -109,12 +109,18 @@ public:
 
   MqttDevice* getDevice(String id) {
     auto it = _devices.find(id);
-    
     if (it != _devices.end()) {
       return it->second;
     }
-    
-    return new MqttDevice();
+
+    // If device is not registered yet, create it, set its id and baseTopic,
+    // store it in the map and return it. Prevents callers from receiving
+    // a heap allocation that isn't tracked (memory leak).
+    MqttDevice* d = new MqttDevice();
+    d->deviceId = id;
+    d->baseTopic = _opts.baseTopic;
+    _devices[id] = d;
+    return d;
   }
 
 private:

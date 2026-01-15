@@ -51,12 +51,15 @@ struct MqttDevice {
 
   MqttEntity* getEntity(String id) {
     auto it = entities.find(id);
-    
     if (it != entities.end()) {
       return it->second;
     }
-    
-    return new MqttEntity();
+
+    // Create, store and return a new entity to avoid leaking anonymous allocations
+    MqttEntity* e = new MqttEntity();
+    e->id = id;
+    entities[id] = e;
+    return e;
   }
 };
 
