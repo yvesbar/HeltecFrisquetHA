@@ -147,6 +147,69 @@ struct temperature16 {
     }
 };
 
+struct pression16 {
+    byte bytes[2] = {0};
+
+    pression16() {}
+    pression16(byte b0, byte b1) {
+        this->bytes[0] = b0;
+        this->bytes[1] = b1;
+    }
+    pression16(byte bytes[]) {
+        memcpy(this->bytes, bytes, 2);
+    }
+    pression16(float value) {
+        if(isnan(value)) {
+            value = 0;
+        }
+        int16_t intValue = static_cast<int16_t>(round(value * 5120.0f));
+        this->bytes[0] = (intValue >> 8) & 0xFF;
+        this->bytes[1] = intValue & 0xFF;
+    }
+
+    float toFloat() const {
+        int16_t intValue = static_cast<int16_t>((bytes[0] << 8) | bytes[1]);
+        return intValue / 5120.0f;
+    }
+
+    bool operator ==(const temperature16 b) {
+        return toFloat() == b.toFloat();
+    }
+    bool operator ==(const float b) {
+        return toFloat() == b;
+    }
+    bool operator !=(const temperature16 b) {
+        return toFloat() != b.toFloat();
+    }
+    bool operator !=(const float b) {
+        return toFloat() != b;
+    }
+    bool operator <=(const temperature16 b) {
+        return toFloat() <= b.toFloat();
+    }
+    bool operator <=(const float b) {
+        return toFloat() <= b;
+    }
+    bool operator <(const temperature16 b) {
+        return toFloat() < b.toFloat();
+    }
+    bool operator <(const float b) {
+        return toFloat() < b;
+    }
+    bool operator >=(const temperature16 b) {
+        return toFloat() >= b.toFloat();
+    }
+    bool operator >=(const float b) {
+        return toFloat() >= b;
+    }
+    bool operator >(const temperature16 b) {
+        return toFloat() == b.toFloat();
+    }
+    bool operator >(const float b) {
+        return toFloat() > b;
+    }
+};
+
 struct Date {
     uint8_t annee = 0;
     uint8_t mois = 0;

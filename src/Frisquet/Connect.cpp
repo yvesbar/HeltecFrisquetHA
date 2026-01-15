@@ -113,7 +113,7 @@ bool Connect::envoyerZone(Zone& zone) {
     return false;
 }
 
-bool Connect::recupererTemperatures() {
+bool Connect::recupererInformations() {
     if(! estAssocie()) {
         return false;
     }
@@ -131,8 +131,7 @@ bool Connect::recupererTemperatures() {
         temperature16 temperatureInconnue3;
         temperature16 temperatureInconnue4;
         temperature16 temperatureInconnue5;
-        temperature8 temperatureInconnue6;
-        temperature8 temperatureInconnue7;
+        pression16 pression;
         byte i1[1] = {0};
         byte modeECS;
         temperature16 temperatureECSInstant;
@@ -191,6 +190,8 @@ bool Connect::recupererTemperatures() {
         setTemperatureExterieure(buff.temperatureExterieure.toFloat());
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
+
+        setPression(buff.pression.toFloat());
         return true;
     } while(retry++ < 1);
 
@@ -326,53 +327,6 @@ bool Connect::recupererModeECS() {
         uint8_t masked = raw & 0x7F;
         info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X", raw, masked);
         setModeECS((MODE_ECS)masked);
-
-        return true;
-    } while(retry++ < 1);
-
-    return false;
-}
-
-bool Connect::recupererPression() {
-    if(! estAssocie()) {
-        return false;
-    }
-
-
-    struct {
-        FrisquetRadio::RadioTrameHeader header;
-        uint8_t longueurDonnees;
-        fword pression;
-    } buff;
-    
-
-    size_t length = 0;
-    int16_t err;
-
-    uint8_t retry = 0;
-    do {
-        //length = sizeof(buff);
-        err = this->radio().sendAsk(
-            this->getId(), 
-            ID_CHAUDIERE, 
-            this->getIdAssociation(),
-            this->incrementIdMessage(),
-            0x01,
-            0x7A06 + (ID_CHAUDIERE == 0x84 ? 0xC8 : 0x00),
-            0x0001,
-            (byte*)&buff,
-            length
-        );
-
-        if(err != RADIOLIB_ERR_NONE) {
-            delay(10);
-            continue;
-        }
-        
-        uint16_t raw = buff.pression.toUInt16();
-        float pression = (raw / 5120.0);
-        setPression(pression);
-        debug("[CONNECT] pression reçue brut=0x%02X, réelle:0x%0.2f", raw, getPression());
 
         return true;
     } while(retry++ < 1);
@@ -674,7 +628,7 @@ void Connect::loop() {
     if(estAssocie()) {
         if (now - _lastRecuperationTemperatures >= 300000 || _lastRecuperationTemperatures == 0) { // 5 minutes
             info("[CONNECT] Récupération des températures...");
-            if(recupererTemperatures()) {
+            if(recupererInformations()) {
                 _lastRecuperationTemperatures = now;
                 publishMqtt();
                 _zone1.publishMqtt();
@@ -685,13 +639,13 @@ void Connect::loop() {
                 error("[CONNECT] Échec de la récupération des températures.");
             }
             delay(100);
-            info("[CONNECT] Récupération de la pression...");
+            /*info("[CONNECT] Récupération de la pression...");
             if(recupererPression()) {
                 publishMqtt();
             } else {
                 _lastRecuperationTemperatures = now <= 60000 ? 1 : now - 60000;
                 error("[CONNECT] Échec de la récupération des températures.");
-            }
+            }*/
         }
 
         if (now - _lastRecuperationConsommation >= 3600000 || _lastRecuperationConsommation == 0) { // 1 heure

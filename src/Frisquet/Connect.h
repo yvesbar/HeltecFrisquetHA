@@ -44,9 +44,8 @@ class Connect : public FrisquetDevice {
 
         bool envoyerZone(Zone& zone);
         bool envoyerModeECS();
-        bool recupererTemperatures();
+        bool recupererInformations();
         bool recupererConsommation();
-        bool recupererPression();
         bool recupererModeECS();
 
         float getTemperatureExterieure();

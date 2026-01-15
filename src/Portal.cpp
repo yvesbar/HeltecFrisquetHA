@@ -536,12 +536,6 @@ void Portal::handleMemoryRead() {
     return;
   }
 
-  if (!_frisquetManager.connect().estAssocie()) {
-    _srv.send(400, "application/json; charset=utf-8",
-              "{\"ok\":false,\"err\":\"Connect non associé\"}");
-    return;
-  }
-
   uint16_t start = 0;
   uint16_t len = 16;
 
@@ -690,12 +684,6 @@ void Portal::handleMemoryScan() {
   if (_srv.method() != HTTP_GET) {
     _srv.send(405, "application/json; charset=utf-8",
               "{\"ok\":false,\"err\":\"Méthode non autorisée\"}");
-    return;
-  }
-
-  if (!_frisquetManager.connect().estAssocie()) {
-    _srv.send(400, "application/json; charset=utf-8",
-              "{\"ok\":false,\"err\":\"Connect non associé\"}");
     return;
   }
 
