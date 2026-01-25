@@ -444,6 +444,7 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
     auto addrIsConsommation = adresseMemoire == addrConsommation || adresseMemoire == (addrConsommation + 0x00C8);
 
     if (addrIsInformations) {
+        debug("[CONNECT] Réception des informations passives du Connect.");
         struct {
             FrisquetRadio::RadioTrameHeader header;
             uint8_t longueurDonnees;
@@ -509,6 +510,7 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
     }
 
     if (addrIsConsommation) {
+        debug("[CONNECT] Réception des consommations passives du Connect.");
         struct {
             FrisquetRadio::RadioTrameHeader header;
             uint8_t longueurDonnees;
@@ -586,11 +588,13 @@ bool Connect::onReceive(byte* donnees, size_t length) {
                 buffRx,
                 lengthRx,
                 15,
-                true
+                false
             );
             if (err != RADIOLIB_ERR_NONE) {
                 return false;
             }
+
+            debug("[CONNECT] Réception réponse passive lecture adresse 0x%04X", requete.adresseMemoire.toUInt16());
             return handlePassiveReadResponse(requete.adresseMemoire.toUInt16(), buffRx, lengthRx);
         }
         return false;
