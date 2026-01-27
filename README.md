@@ -1,6 +1,6 @@
 # 🧠 OpenFrisquetVisio
 
-Emulation complète du module **Frisquet Connect** sur base **Heltec ESP32 WiFi LoRa 32 (SX1262)**.  
+Emulation complète du module **Frisquet Connect**, **sonde Extérieure** ou encore **satellite d'ambiance** sur base **Heltec ESP32 WiFi LoRa 32 (SX1262)**.  
 Ce projet permet à un ESP32 de dialoguer directement avec votre chaudière Frisquet,  
 de récupérer les informations en temps réel et de les exposer à **Home Assistant via MQTT**.
 
