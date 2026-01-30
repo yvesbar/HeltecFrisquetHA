@@ -577,7 +577,9 @@ void Portal::handleLogsPage() {
 
 void Portal::handleStatus() {
   bool sta = WiFi.isConnected();
-  bool ap  = _apRunning;
+  wifi_mode_t mode = WiFi.getMode();
+  bool ap  = (mode == WIFI_AP || mode == WIFI_AP_STA);
+  _apRunning = ap;
 
   IPAddress ip = WiFi.localIP();
   String ssid = sta ? WiFi.SSID() : "";
@@ -1193,16 +1195,20 @@ void Portal::scheduleReboot(uint32_t delayMs) {
 }
 
 void Portal::startAp() {
-  _apRunning = true;
   WiFi.mode(WIFI_AP_STA);
   bool ok;
   if (_apPass.length() >= 8) ok = WiFi.softAP(_apSsid.c_str(), _apPass.c_str());
   else                       ok = WiFi.softAP(_apSsid.c_str()); // open
+  _apRunning = ok;
   IPAddress ip = WiFi.softAPIP();
-  info("[PORTAIL] AP fallback %s (%s) %s",
-       _apSsid.c_str(),
-       (_apPass.length() >= 8 ? "WPA2" : "OPEN"),
-       ip.toString().c_str());
+  if (ok) {
+    info("[PORTAIL] AP fallback %s (%s) %s",
+         _apSsid.c_str(),
+         (_apPass.length() >= 8 ? "WPA2" : "OPEN"),
+         ip.toString().c_str());
+  } else {
+    error("[PORTAIL] AP fallback: échec du démarrage");
+  }
 }
 
 String Portal::html() {
