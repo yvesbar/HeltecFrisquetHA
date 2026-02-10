@@ -593,6 +593,10 @@ bool Connect::onReceive(byte* donnees, size_t length) {
                 return false;
             }
 
+            setIdAssociation(header.idAssociation);
+            setIdMessage(header.idMessage);
+            saveConfig();
+
             debug("[CONNECT] Réception réponse passive lecture adresse 0x%04X", requete.adresseMemoire.toUInt16());
             return handlePassiveReadResponse(requete.adresseMemoire.toUInt16(), buffRx, lengthRx);
         }
