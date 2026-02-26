@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include "Logs.h"
 #include "Zone.h"
+#include "Chaudiere.h"
 
 class Satellite : public FrisquetDevice {
     
@@ -19,37 +20,8 @@ class Satellite : public FrisquetDevice {
             INCONNU = 0xFF,
         };
 
-        struct ETAT_CHAUDIERE {
-            ETAT_CHAUDIERE() : fonctionnement(false), arretChauffage(false) {}
-            ETAT_CHAUDIERE(byte etat) {
-                set(etat);
-            }
-            void set(byte etat) {
-                fonctionnement = (etat & 0b00001000) != 0;
-                arretChauffage = (etat & 0b00000100) != 0;
-            }
-            byte toByte() {
-                byte etat = 0;
-                if(fonctionnement) etat |= 0b00001000;
-                if(arretChauffage) etat |= 0b00000100;
-                return etat;
-            }
-
-            bool fonctionnement = false;
-            bool arretChauffage = false;
-
-            String getLibelle() {
-                if(arretChauffage) {
-                    return "Arrêt chauffage";
-                } else if(!fonctionnement) {
-                    return "Veille";
-                } else {
-                    return "Fonctionnement";
-                }
-            }
-        };
-
-        Satellite(FrisquetRadio& radio, Config& cfg, MqttManager& mqtt, Zone& zone) : FrisquetDevice(radio, cfg, mqtt, zone.getIdZone()), _zone(zone) {}
+        Satellite(FrisquetRadio& radio, Config& cfg, MqttManager& mqtt, Zone& zone, Chaudiere& chaudiere)
+            : FrisquetDevice(radio, cfg, mqtt, zone.getIdZone()), _zone(zone), _chaudiere(chaudiere) {}
         void loadConfig();
         void saveConfig();
 
@@ -60,6 +32,7 @@ class Satellite : public FrisquetDevice {
         bool envoyerConsigne();
         bool envoyerTemperatureAmbiante();
         bool recupererInfosChaudiere();
+        bool recupererTemperatureCDC();
 
         bool onReceive(byte* donnees, size_t length);
 
@@ -70,8 +43,8 @@ class Satellite : public FrisquetDevice {
         void setEcrasement(bool ecrasement) { _ecrasement = ecrasement; }
         bool getEcrasement() { return _ecrasement; }
 
-        void setEtatChaudiere(byte etatChaudiere) { _etatChaudiere.set(etatChaudiere); }
-        ETAT_CHAUDIERE getEtatChaudiere() { return _etatChaudiere; }
+        void setEtatChaudiere(byte etatChaudiere) { _chaudiere.setEtatChaudiere(etatChaudiere); }
+        Chaudiere::ETAT_CHAUDIERE getEtatChaudiere() { return _chaudiere.getEtatChaudiere(); }
 
         uint8_t getNumeroZone() {
             return _zone.getNumeroZone();
@@ -79,14 +52,13 @@ class Satellite : public FrisquetDevice {
 
     private:
         Zone& _zone;
+        Chaudiere& _chaudiere;
 
         uint32_t _lastEnvoiConsigne = 0;
+        uint32_t _lastRecuperationTemperatureCDC = 0;
         bool _modeVirtuel = false;
         bool _ecrasement = false;
-        ETAT_CHAUDIERE _etatChaudiere;
-
         struct {
             MqttEntity ecrasementConsigne;
-            MqttEntity etatChaudiere;
         } _mqttEntities;
 };

@@ -110,7 +110,7 @@ void Zone::begin() {
     _mqttEntities.temperatureConsigne.set("device_class", "temperature");
     _mqttEntities.temperatureConsigne.set("state_class", "measurement");
     _mqttEntities.temperatureConsigne.set("unit_of_measurement", "°C");
-    if(getSource() == SOURCE::SATELLITE_VIRTUEL) {
+    if(getSource() == SOURCE::SATELLITE_VIRTUEL || getSource() == SOURCE::CONNECT) {
         /*_mqttEntities.temperatureConsigne.component = "number";
         _mqttEntities.temperatureConsigne.set("min", "5");
         _mqttEntities.temperatureConsigne.set("max", "30");
@@ -121,7 +121,50 @@ void Zone::begin() {
             float temperature = payload.toFloat();
             if(!isnan(temperature)) {
                 info("[ZONE Z%d] Modification de la température consigne à %0.2f.", getNumeroZone(), temperature);
-                setTemperatureConsigne(temperature);
+
+                if(getSource() == SOURCE::CONNECT) {
+                    const char* profilModifie = "Consigne";
+                    switch(getMode()) {
+                        case MODE_ZONE::CONFORT:
+                            profilModifie = "Confort";
+                            setTemperatureConfort(temperature);
+                            setTemperatureConsigne(boostActif() ? (getTemperatureConfort() + getTemperatureBoost()) : getTemperatureConfort());
+                            mqtt().publishState(_mqttEntities.temperatureConfort, getTemperatureConfort());
+                            break;
+                        case MODE_ZONE::REDUIT:
+                            profilModifie = "Réduit";
+                            setTemperatureReduit(temperature);
+                            setTemperatureConsigne(getTemperatureReduit());
+                            mqtt().publishState(_mqttEntities.temperatureReduit, getTemperatureReduit());
+                            break;
+                        case MODE_ZONE::HORS_GEL:
+                            profilModifie = "Hors Gel";
+                            setTemperatureHorsGel(temperature);
+                            setTemperatureConsigne(getTemperatureHorsGel());
+                            mqtt().publishState(_mqttEntities.temperatureHorsGel, getTemperatureHorsGel());
+                            break;
+                        case MODE_ZONE::AUTO:
+                            if((getModeOptions() & 0b00000001) != 0) {
+                                profilModifie = "Auto-Confort";
+                                setTemperatureConfort(temperature);
+                                setTemperatureConsigne(getTemperatureConfort());
+                                mqtt().publishState(_mqttEntities.temperatureConfort, getTemperatureConfort());
+                            } else {
+                                profilModifie = "Auto-Réduit";
+                                setTemperatureReduit(temperature);
+                                setTemperatureConsigne(getTemperatureReduit());
+                                mqtt().publishState(_mqttEntities.temperatureReduit, getTemperatureReduit());
+                            }
+                            break;
+                        default:
+                            setTemperatureConsigne(temperature);
+                            break;
+                    }
+                    info("[ZONE Z%d][CONNECT] Profil modifié via consigne: %s.", getNumeroZone(), profilModifie);
+                } else {
+                    setTemperatureConsigne(temperature);
+                }
+
                 mqtt().publishState(_mqttEntities.temperatureConsigne, getTemperatureConsigne());
                 refreshLastChange();
                 saveConfig();

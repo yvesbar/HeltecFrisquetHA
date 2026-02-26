@@ -43,15 +43,6 @@ void Satellite::begin(bool modeVirtuel) {
         mqtt().publishState(_mqttEntities.ecrasementConsigne, payload);
     });
 
-    if(this->getId() == ID_ZONE_1) { // Seulement sur Z1 (leader)
-        // Sensor: Retour fonctionnement chaudière
-        _mqttEntities.etatChaudiere.id = "etatChaudiere";
-        _mqttEntities.etatChaudiere.name = "État chaudière";
-        _mqttEntities.etatChaudiere.component = "sensor";
-        _mqttEntities.etatChaudiere.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "etatChaudiere"}), 0, true);
-        _mqttEntities.etatChaudiere.set("icon", "mdi:tune-variant");
-        mqtt().registerEntity(*device, _mqttEntities.etatChaudiere, true);
-    }
 }
 
 void Satellite::loop() {
@@ -71,9 +62,26 @@ void Satellite::loop() {
 
     if(firstLoop) {
         recupererInfosChaudiere();
+        if (this->getId() == ID_ZONE_1) {
+            if (recupererTemperatureCDC()) {
+                _lastRecuperationTemperatureCDC = now;
+            }
+        }
         publishMqtt();
         _zone.publishMqtt();
         firstLoop = false;
+    }
+
+    if (this->getId() == ID_ZONE_1 && (now - _lastRecuperationTemperatureCDC >= 300000 || _lastRecuperationTemperatureCDC == 0)) { // 5 minutes
+        info("[SATELLITE Z%d] Récupération de la température CDC...", getNumeroZone());
+        if (recupererTemperatureCDC()) {
+            _lastRecuperationTemperatureCDC = now;
+            _chaudiere.publishMqtt();
+        } else {
+            _lastRecuperationTemperatureCDC = now <= 60000 ? 1 : now - 60000;
+            error("[SATELLITE Z%d] Échec de la récupération de la température CDC.", getNumeroZone());
+        }
+        delay(100);
     }
 
     if ((_zone.getLastChange() > _zone.getLastEnvoi() && (_zone.getLastChange() + 15000) < now ) || now - _lastEnvoiConsigne >= 600000  ) { // dernier changement ou 10 minutes
@@ -94,7 +102,7 @@ void Satellite::loop() {
 void Satellite::publishMqtt() {
     mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("ecrasementConsigneZ" + String(getNumeroZone())), getEcrasement() ? "ON" : "OFF");
     if(this->getId() == ID_ZONE_1) { // Seulement sur Z1 (leader)
-        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("etatChaudiere"), _etatChaudiere.getLibelle().c_str());
+        _chaudiere.publishMqtt();
     }
 }
 
@@ -157,6 +165,48 @@ bool Satellite::recupererInfosChaudiere() {
         Date date = donneesZones.date;
         setDate(date);
         
+        return true;
+    } while(retry++ < 1);
+
+    return false;
+}
+
+bool Satellite::recupererTemperatureCDC() {
+    if(! estAssocie() || getNumeroZone() == 0) {
+        return false;
+    }
+
+    struct donneesTemperatureCDC_t {
+        FrisquetRadio::RadioTrameHeader header;
+        uint8_t longueurDonnees;
+        temperature16 temperatureCDC;
+    } donneesTemperatureCDC;
+
+    size_t length = sizeof(donneesTemperatureCDC_t);
+    int16_t err;
+
+    uint8_t retry = 0;
+    do {
+        err = this->radio().sendAsk(
+            this->getId(),
+            ID_CHAUDIERE,
+            this->getIdAssociation(),
+            this->incrementIdMessage(),
+            0x01,
+            0xA05E,
+            0x0001,
+            (byte*)&donneesTemperatureCDC,
+            length
+        );
+
+        if(err != RADIOLIB_ERR_NONE) {
+            delay(30);
+            continue;
+        }
+
+        float temperatureCDC = donneesTemperatureCDC.temperatureCDC.toFloat();
+        _chaudiere.setTemperatureCDC(temperatureCDC);
+        debug("[SATELLITE Z%d] Température CDC : %.1f°C", getNumeroZone(), temperatureCDC);
         return true;
     } while(retry++ < 1);
 

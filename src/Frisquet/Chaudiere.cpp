@@ -7,6 +7,13 @@ void Chaudiere::begin(std::function<void(const String&)> modeEcsCommandCb) {
 
     MqttDevice* device = _mqtt.getDevice("openFrisquetVisio");
 
+    _mqttEntities.etatChaudiere.id = "etatChaudiere";
+    _mqttEntities.etatChaudiere.name = "État chaudière";
+    _mqttEntities.etatChaudiere.component = "sensor";
+    _mqttEntities.etatChaudiere.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "chaudiere", "etatChaudiere"}), 0, true);
+    _mqttEntities.etatChaudiere.set("icon", "mdi:tune-variant");
+    _mqtt.registerEntity(*device, _mqttEntities.etatChaudiere, true);
+
     _mqttEntities.tempECS.id = "temperatureECS";
     _mqttEntities.tempECS.name = "Température ECS";
     _mqttEntities.tempECS.component = "sensor";
@@ -82,6 +89,8 @@ void Chaudiere::begin(std::function<void(const String&)> modeEcsCommandCb) {
 }
 
 void Chaudiere::publishMqtt() {
+    _mqtt.publishState(_mqttEntities.etatChaudiere, getEtatChaudiere().getLibelle().c_str());
+
     if (!isnan(getTemperatureECS())) {
         _mqtt.publishState(_mqttEntities.tempECS, getTemperatureECS());
     }
