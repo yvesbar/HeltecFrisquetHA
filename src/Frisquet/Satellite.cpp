@@ -48,6 +48,7 @@ void Satellite::begin(bool modeVirtuel) {
 void Satellite::loop() {
     
     static bool firstLoop = true;
+    const bool cdcGereeParConnect = getConfig().useConnect();
     if(firstLoop && !_modeVirtuel) {
         firstLoop = false;
         publishMqtt();
@@ -62,7 +63,7 @@ void Satellite::loop() {
 
     if(firstLoop) {
         recupererInfosChaudiere();
-        if (this->getId() == ID_ZONE_1) {
+        if (this->getId() == ID_ZONE_1 && !cdcGereeParConnect) {
             if (recupererTemperatureCDC()) {
                 _lastRecuperationTemperatureCDC = now;
             }
@@ -72,7 +73,7 @@ void Satellite::loop() {
         firstLoop = false;
     }
 
-    if (this->getId() == ID_ZONE_1 && (now - _lastRecuperationTemperatureCDC >= 300000 || _lastRecuperationTemperatureCDC == 0)) { // 5 minutes
+    if (this->getId() == ID_ZONE_1 && !cdcGereeParConnect && (now - _lastRecuperationTemperatureCDC >= 300000 || _lastRecuperationTemperatureCDC == 0)) { // 5 minutes
         info("[SATELLITE Z%d] Récupération de la température CDC...", getNumeroZone());
         if (recupererTemperatureCDC()) {
             _lastRecuperationTemperatureCDC = now;
