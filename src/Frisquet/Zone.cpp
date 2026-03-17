@@ -258,6 +258,16 @@ void Zone::begin() {
     _mqttEntities.temperatureDepart.set("unit_of_measurement", "°C");
     mqtt().registerEntity(*device, _mqttEntities.temperatureDepart, true);
 
+    // SENSOR: Température consigne départ
+    _mqttEntities.temperatureConsigneDepart.id = "temperatureConsigneDepartZ" + String(getNumeroZone());
+    _mqttEntities.temperatureConsigneDepart.name = "Température Consigne Départ Z" + String(getNumeroZone());
+    _mqttEntities.temperatureConsigneDepart.component = "sensor";
+    _mqttEntities.temperatureConsigneDepart.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic,"z" + String(getNumeroZone()),"temperatureConsigneDepart"}), 0, true);
+    _mqttEntities.temperatureConsigneDepart.set("device_class", "temperature");
+    _mqttEntities.temperatureConsigneDepart.set("state_class", "measurement");
+    _mqttEntities.temperatureConsigneDepart.set("unit_of_measurement", "°C");
+    mqtt().registerEntity(*device, _mqttEntities.temperatureConsigneDepart, true);
+
     // SENSOR: Température boost
     _mqttEntities.temperatureBoost.id = "temperatureBoostZ" + String(getNumeroZone());
     _mqttEntities.temperatureBoost.name = "Température Boost Z" + String(getNumeroZone());
@@ -381,6 +391,9 @@ void Zone::setTemperatureBoost(float temperature) {
 void Zone::setTemperatureDepart(float temperature) {
     this->_temperatureDepart = temperature;
 }
+void Zone::setTemperatureConsigneDepart(float temperature) {
+    this->_temperatureConsigneDepart = temperature;
+}
 
 float Zone::getTemperatureConfort() {
     return this->_temperatureConfort;
@@ -399,6 +412,9 @@ float Zone::getTemperatureAmbiante() {
 }
 float Zone::getTemperatureDepart() {
     return this->_temperatureDepart;
+}
+float Zone::getTemperatureConsigneDepart() {
+    return this->_temperatureConsigneDepart;
 }
 float Zone::getTemperatureBoost() {
     return this->_temperatureBoost;
@@ -520,6 +536,9 @@ void Zone::publishMqtt() {
     }
     if(!isnan(getTemperatureDepart())) {
         mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureDepartZ" + String(getNumeroZone())), getTemperatureDepart());
+    }
+    if(!isnan(getTemperatureConsigneDepart())) {
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureConsigneDepartZ" + String(getNumeroZone())), getTemperatureConsigneDepart());
     }
     if(!isnan(getTemperatureConfort())) {
         mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureConfortZ" + String(getNumeroZone())), getTemperatureConfort());

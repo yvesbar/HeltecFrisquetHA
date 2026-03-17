@@ -56,10 +56,14 @@ public:
     void setTemperatureExterieure(float temperature);
     void setTemperatureECS(float temperature);
     void setTemperatureCDC(float temperature);
+    void setPuissanceInstantaneeECS(float puissance) { _puissanceInstantaneeECS = puissance; }
+    void setPuissanceInstantaneeChauffage(float puissance) { _puissanceInstantaneeChauffage = puissance; }
 
     float getTemperatureExterieure() const { return _temperatureExterieure; }
     float getTemperatureECS() const { return _temperatureECS; }
     float getTemperatureCDC() const { return _temperatureCDC; }
+    float getPuissanceInstantaneeECS() const { return _puissanceInstantaneeECS; }
+    float getPuissanceInstantaneeChauffage() const { return _puissanceInstantaneeChauffage; }
 
     void setConsommationECS(int16_t consommation);
     void setConsommationChauffage(int16_t consommation);
@@ -84,6 +88,8 @@ private:
     float _temperatureECS = NAN;
     float _temperatureCDC = NAN;
     float _temperatureExterieure = NAN;
+    float _puissanceInstantaneeECS = NAN;
+    float _puissanceInstantaneeChauffage = NAN;
     float _pression = NAN;
 
     int16_t _consommationGazECS = -1;
@@ -101,6 +107,8 @@ private:
         MqttEntity tempECS;
         MqttEntity tempCDC;
         MqttEntity tempExterieure;
+        MqttEntity puissanceInstantaneeECS;
+        MqttEntity puissanceInstantaneeChauffage;
         MqttEntity consommationChauffage;
         MqttEntity consommationECS;
         MqttEntity pression;

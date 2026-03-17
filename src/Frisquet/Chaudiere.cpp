@@ -45,6 +45,24 @@ void Chaudiere::begin(std::function<void(const String&)> modeEcsCommandCb) {
     _mqttEntities.tempExterieure.set("unit_of_measurement", "°C");
     _mqtt.registerEntity(*device, _mqttEntities.tempExterieure, true);
 
+    _mqttEntities.puissanceInstantaneeECS.id = "puissanceInstantaneeECS";
+    _mqttEntities.puissanceInstantaneeECS.name = "Puissance instantanée ECS";
+    _mqttEntities.puissanceInstantaneeECS.component = "sensor";
+    _mqttEntities.puissanceInstantaneeECS.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "chaudiere", "puissanceInstantaneeECS"}), 0, true);
+    _mqttEntities.puissanceInstantaneeECS.set("device_class", "power");
+    _mqttEntities.puissanceInstantaneeECS.set("state_class", "measurement");
+    _mqttEntities.puissanceInstantaneeECS.set("unit_of_measurement", "kW");
+    _mqtt.registerEntity(*device, _mqttEntities.puissanceInstantaneeECS, true);
+
+    _mqttEntities.puissanceInstantaneeChauffage.id = "puissanceInstantaneeChauffage";
+    _mqttEntities.puissanceInstantaneeChauffage.name = "Puissance instantanée Chauffage";
+    _mqttEntities.puissanceInstantaneeChauffage.component = "sensor";
+    _mqttEntities.puissanceInstantaneeChauffage.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "chaudiere", "puissanceInstantaneeChauffage"}), 0, true);
+    _mqttEntities.puissanceInstantaneeChauffage.set("device_class", "power");
+    _mqttEntities.puissanceInstantaneeChauffage.set("state_class", "measurement");
+    _mqttEntities.puissanceInstantaneeChauffage.set("unit_of_measurement", "kW");
+    _mqtt.registerEntity(*device, _mqttEntities.puissanceInstantaneeChauffage, true);
+
     _mqttEntities.consommationChauffage.id = "consommationChauffage";
     _mqttEntities.consommationChauffage.name = "Consommation chauffage";
     _mqttEntities.consommationChauffage.component = "sensor";
@@ -99,6 +117,12 @@ void Chaudiere::publishMqtt() {
     }
     if (!isnan(getTemperatureExterieure())) {
         _mqtt.publishState(_mqttEntities.tempExterieure, getTemperatureExterieure());
+    }
+    if (!isnan(getPuissanceInstantaneeECS())) {
+        _mqtt.publishState(_mqttEntities.puissanceInstantaneeECS, getPuissanceInstantaneeECS());
+    }
+    if (!isnan(getPuissanceInstantaneeChauffage())) {
+        _mqtt.publishState(_mqttEntities.puissanceInstantaneeChauffage, getPuissanceInstantaneeChauffage());
     }
 
     if (getConsommationChauffage() >= 0) {
