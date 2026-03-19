@@ -127,10 +127,10 @@ bool Connect::recupererInformations() {
         temperature16 temperatureDepartZ1;
         temperature16 temperatureDepartZ2;
         temperature16 temperatureDepartZ3;
-        temperature16 temperatureInconnue1;
+        temperature16 temperatureSondeSecuriteCDC;
         temperature16 temperatureInconnue2;
-        temperature16 temperatureInconnue3;
-        temperature16 temperatureInconnue4;
+        temperature16 puissanceInstantaneeECS;
+        temperature16 puissanceInstantaneeChauffage;
         temperature16 temperatureInconnue5;
         pression16 pression;
         byte i1[1] = {0};
@@ -140,7 +140,9 @@ bool Connect::recupererInformations() {
         temperature16 temperatureAmbianteZ1;
         temperature16 temperatureAmbianteZ2;
         temperature16 temperatureAmbianteZ3;
-        byte i3[6] = {0};
+        temperature16 temperatureConsigneDepartZ1;
+        temperature16 temperatureConsigneDepartZ2;
+        temperature16 temperatureConsigneDepartZ3;
         temperature16 temperatureConsigneZ1;
         temperature16 temperatureConsigneZ2;
         temperature16 temperatureConsigneZ3;
@@ -175,22 +177,30 @@ bool Connect::recupererInformations() {
             getZone1().setTemperatureConsigne(buff.temperatureConsigneZ1.toFloat());
         }
         getZone1().setTemperatureDepart(buff.temperatureDepartZ1.toFloat());
+        getZone1().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ1.toFloat());
 
         if(getZone2().getSource() == Zone::SOURCE::CONNECT) {
             getZone2().setTemperatureAmbiante(buff.temperatureAmbianteZ2.toFloat());
             getZone2().setTemperatureConsigne(buff.temperatureConsigneZ2.toFloat());
         }
         getZone2().setTemperatureDepart(buff.temperatureDepartZ2.toFloat());
+        getZone2().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ2.toFloat());
 
         if(getZone3().getSource() == Zone::SOURCE::CONNECT) {
             getZone3().setTemperatureAmbiante(buff.temperatureAmbianteZ3.toFloat());
             getZone3().setTemperatureConsigne(buff.temperatureConsigneZ3.toFloat());
         }
         getZone3().setTemperatureDepart(buff.temperatureDepartZ3.toFloat());
+        getZone3().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ3.toFloat());
 
-        setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+
+        if(buff.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+        }
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
+        _chaudiere.setPuissanceInstantaneeECS(buff.puissanceInstantaneeECS.toFloat());
+        _chaudiere.setPuissanceInstantaneeChauffage(buff.puissanceInstantaneeChauffage.toFloat());
 
         setPression(buff.pression.toFloat());
         return true;
@@ -432,10 +442,10 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
             temperature16 temperatureDepartZ1;
             temperature16 temperatureDepartZ2;
             temperature16 temperatureDepartZ3;
-            temperature16 temperatureInconnue1;
+            temperature16 temperatureSondeSecuriteCDC;
             temperature16 temperatureInconnue2;
-            temperature16 temperatureInconnue3;
-            temperature16 temperatureInconnue4;
+            temperature16 puissanceInstantaneeECS;
+            temperature16 puissanceInstantaneeChauffage;
             temperature16 temperatureInconnue5;
             pression16 pression;
             byte i1[1] = {0};
@@ -445,7 +455,9 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
             temperature16 temperatureAmbianteZ1;
             temperature16 temperatureAmbianteZ2;
             temperature16 temperatureAmbianteZ3;
-            byte i3[6] = {0};
+            temperature16 temperatureConsigneDepartZ1;
+            temperature16 temperatureConsigneDepartZ2;
+            temperature16 temperatureConsigneDepartZ3;
             temperature16 temperatureConsigneZ1;
             temperature16 temperatureConsigneZ2;
             temperature16 temperatureConsigneZ3;
@@ -462,22 +474,29 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
             getZone1().setTemperatureConsigne(resp.temperatureConsigneZ1.toFloat());
         }
         getZone1().setTemperatureDepart(resp.temperatureDepartZ1.toFloat());
+        getZone1().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ1.toFloat());
 
         if (getZone2().getSource() == Zone::SOURCE::CONNECT) {
             getZone2().setTemperatureAmbiante(resp.temperatureAmbianteZ2.toFloat());
             getZone2().setTemperatureConsigne(resp.temperatureConsigneZ2.toFloat());
         }
         getZone2().setTemperatureDepart(resp.temperatureDepartZ2.toFloat());
+        getZone2().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ2.toFloat());
 
         if (getZone3().getSource() == Zone::SOURCE::CONNECT) {
             getZone3().setTemperatureAmbiante(resp.temperatureAmbianteZ3.toFloat());
             getZone3().setTemperatureConsigne(resp.temperatureConsigneZ3.toFloat());
         }
         getZone3().setTemperatureDepart(resp.temperatureDepartZ3.toFloat());
+        getZone3().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ3.toFloat());
 
-        setTemperatureExterieure(resp.temperatureExterieure.toFloat());
+        if(resp.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(resp.temperatureExterieure.toFloat());
+        }
         setTemperatureECS(resp.temperatureECS.toFloat());
         setTemperatureCDC(resp.temperatureCDC.toFloat());
+        _chaudiere.setPuissanceInstantaneeECS(resp.puissanceInstantaneeECS.toFloat());
+        _chaudiere.setPuissanceInstantaneeChauffage(resp.puissanceInstantaneeChauffage.toFloat());
         setPression(resp.pression.toFloat());
 
         _lastRecuperationTemperatures = millis();
@@ -592,6 +611,10 @@ bool Connect::onReceive(byte* donnees, size_t length) {
             if (err != RADIOLIB_ERR_NONE) {
                 return false;
             }
+
+            setIdAssociation(header.idAssociation);
+            setIdMessage(header.idMessage);
+            saveConfig();
 
             debug("[CONNECT] Réception réponse passive lecture adresse 0x%04X", requete.adresseMemoire.toUInt16());
             return handlePassiveReadResponse(requete.adresseMemoire.toUInt16(), buffRx, lengthRx);

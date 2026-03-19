@@ -38,7 +38,7 @@ void Config::load() {
   _wifiOpts.wifiSleep     = _preferences.getBool("wifiSleep", false);
 
   // MQTT
-  _mqttOpts.clientId      = _preferences.getString("mqttClientId", "Heltec Frisquet");
+  _mqttOpts.clientId      = _preferences.getString("mqttClientId", "OpenFrisquetVisio");
   _mqttOpts.host          = _preferences.getString("mqttHost", "192.168.1.10");
   _mqttOpts.port          = _preferences.getUShort("mqttPort", 1883);
   _mqttOpts.username      = _preferences.getString("mqttUser", "");

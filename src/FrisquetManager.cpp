@@ -7,7 +7,7 @@ FrisquetManager::FrisquetManager(FrisquetRadio &radio, Config &cfg, MqttManager 
         _zone1(ID_ZONE_1, mqtt), _zone2(ID_ZONE_2, mqtt), _zone3(ID_ZONE_3, mqtt),
         _chaudiere(mqtt, cfg),
         _sondeExterieure(radio, cfg, mqtt), _connect(radio, cfg, mqtt, _zone1, _zone2, _zone3, _chaudiere),
-        _satelliteZ1(radio, cfg, mqtt, _zone1), _satelliteZ2(radio, cfg, mqtt, _zone2), _satelliteZ3(radio, cfg, mqtt, _zone3) {}
+        _satelliteZ1(radio, cfg, mqtt, _zone1, _chaudiere), _satelliteZ2(radio, cfg, mqtt, _zone2, _chaudiere), _satelliteZ3(radio, cfg, mqtt, _zone3, _chaudiere) {}
 
 void FrisquetManager::begin()
 {
@@ -50,10 +50,18 @@ void FrisquetManager::begin()
         _zone3.begin();
     }
 
+    const bool useSatellite = _cfg.useSatelliteZ1() || _cfg.useSatelliteZ2() || _cfg.useSatelliteZ3();
+    if (_cfg.useConnect() || useSatellite) {
+        if (_cfg.useConnect()) {
+            _chaudiere.begin([this](const String& payload) {
+                _connect.handleModeEcsCommand(payload);
+            });
+        } else {
+            _chaudiere.begin();
+        }
+    }
+
     if (_cfg.useConnect()) {
-        _chaudiere.begin([this](const String& payload) {
-            _connect.handleModeEcsCommand(payload);
-        });
         _connect.begin();
         if (!_cfg.useConnectPassive()) {
             _connect.recupererDate();
