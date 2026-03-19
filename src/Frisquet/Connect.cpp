@@ -193,7 +193,10 @@ bool Connect::recupererInformations() {
         getZone3().setTemperatureDepart(buff.temperatureDepartZ3.toFloat());
         getZone3().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ3.toFloat());
 
-        setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+
+        if(buff.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+        }
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
         _chaudiere.setPuissanceInstantaneeECS(buff.puissanceInstantaneeECS.toFloat());
@@ -487,7 +490,9 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
         getZone3().setTemperatureDepart(resp.temperatureDepartZ3.toFloat());
         getZone3().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ3.toFloat());
 
-        setTemperatureExterieure(resp.temperatureExterieure.toFloat());
+        if(resp.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(resp.temperatureExterieure.toFloat());
+        }
         setTemperatureECS(resp.temperatureECS.toFloat());
         setTemperatureCDC(resp.temperatureCDC.toFloat());
         _chaudiere.setPuissanceInstantaneeECS(resp.puissanceInstantaneeECS.toFloat());
