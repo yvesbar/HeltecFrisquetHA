@@ -33,6 +33,15 @@ void Chaudiere::begin(std::function<void(const String&)> modeEcsCommandCb) {
     _mqttEntities.tempCDC.set("unit_of_measurement", "°C");
     _mqtt.registerEntity(*device, _mqttEntities.tempCDC, true);
 
+    _mqttEntities.tempFumees.id = "temperatureFumees";
+    _mqttEntities.tempFumees.name = "Température fumées";
+    _mqttEntities.tempFumees.component = "sensor";
+    _mqttEntities.tempFumees.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "chaudiere", "temperatureFumees"}), 0, true);
+    _mqttEntities.tempFumees.set("device_class", "temperature");
+    _mqttEntities.tempFumees.set("state_class", "measurement");
+    _mqttEntities.tempFumees.set("unit_of_measurement", "°C");
+    _mqtt.registerEntity(*device, _mqttEntities.tempFumees, true);
+
     _mqttEntities.tempExterieure.id = "temperatureExterieure";
     _mqttEntities.tempExterieure.name = "Température extérieure";
     _mqttEntities.tempExterieure.component = "sensor";
@@ -114,6 +123,9 @@ void Chaudiere::publishMqtt() {
     }
     if (!isnan(getTemperatureCDC())) {
         _mqtt.publishState(_mqttEntities.tempCDC, getTemperatureCDC());
+    }
+    if (!isnan(getTemperatureFumees())) {
+        _mqtt.publishState(_mqttEntities.tempFumees, getTemperatureFumees());
     }
     if (!isnan(getTemperatureExterieure())) {
         _mqtt.publishState(_mqttEntities.tempExterieure, getTemperatureExterieure());

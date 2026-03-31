@@ -13,16 +13,19 @@ public:
             set(etat);
         }
         void set(byte etat) {
+            anomalie = (etat & 0b00000001) != 0;
             fonctionnement = (etat & 0b00001000) != 0;
             arretChauffage = (etat & 0b00000100) != 0;
         }
         byte toByte() {
             byte etat = 0;
+            if(anomalie) etat |= 0b00000001;
             if(fonctionnement) etat |= 0b00001000;
             if(arretChauffage) etat |= 0b00000100;
             return etat;
         }
 
+        bool anomalie = false;
         bool fonctionnement = false;
         bool arretChauffage = false;
 
@@ -34,6 +37,10 @@ public:
             } else {
                 return "Fonctionnement";
             }
+        }
+
+        boolean anomalieDetecte() {
+            return anomalie;
         }
     };
 
@@ -56,12 +63,14 @@ public:
     void setTemperatureExterieure(float temperature);
     void setTemperatureECS(float temperature);
     void setTemperatureCDC(float temperature);
+    void setTemperatureFumees(float temperature) { _temperatureFumees = temperature; }
     void setPuissanceInstantaneeECS(float puissance) { _puissanceInstantaneeECS = puissance; }
     void setPuissanceInstantaneeChauffage(float puissance) { _puissanceInstantaneeChauffage = puissance; }
 
     float getTemperatureExterieure() const { return _temperatureExterieure; }
     float getTemperatureECS() const { return _temperatureECS; }
     float getTemperatureCDC() const { return _temperatureCDC; }
+    float getTemperatureFumees() const { return _temperatureFumees; }
     float getPuissanceInstantaneeECS() const { return _puissanceInstantaneeECS; }
     float getPuissanceInstantaneeChauffage() const { return _puissanceInstantaneeChauffage; }
 
@@ -87,6 +96,7 @@ private:
 
     float _temperatureECS = NAN;
     float _temperatureCDC = NAN;
+    float _temperatureFumees = NAN;
     float _temperatureExterieure = NAN;
     float _puissanceInstantaneeECS = NAN;
     float _puissanceInstantaneeChauffage = NAN;
@@ -106,6 +116,7 @@ private:
         MqttEntity modeECS;
         MqttEntity tempECS;
         MqttEntity tempCDC;
+        MqttEntity tempFumees;
         MqttEntity tempExterieure;
         MqttEntity puissanceInstantaneeECS;
         MqttEntity puissanceInstantaneeChauffage;

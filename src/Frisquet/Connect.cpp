@@ -128,7 +128,7 @@ bool Connect::recupererInformations() {
         temperature16 temperatureDepartZ2;
         temperature16 temperatureDepartZ3;
         temperature16 temperatureSondeSecuriteCDC;
-        temperature16 temperatureInconnue2;
+        temperature16 temperatureFumees;
         temperature16 puissanceInstantaneeECS;
         temperature16 puissanceInstantaneeChauffage;
         temperature16 temperatureInconnue5;
@@ -199,6 +199,7 @@ bool Connect::recupererInformations() {
         }
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
+        _chaudiere.setTemperatureFumees(buff.temperatureFumees.toFloat()/2);
         _chaudiere.setPuissanceInstantaneeECS(buff.puissanceInstantaneeECS.toFloat());
         _chaudiere.setPuissanceInstantaneeChauffage(buff.puissanceInstantaneeChauffage.toFloat());
 
@@ -443,7 +444,7 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
             temperature16 temperatureDepartZ2;
             temperature16 temperatureDepartZ3;
             temperature16 temperatureSondeSecuriteCDC;
-            temperature16 temperatureInconnue2;
+            temperature16 temperatureFumees;
             temperature16 puissanceInstantaneeECS;
             temperature16 puissanceInstantaneeChauffage;
             temperature16 temperatureInconnue5;
@@ -495,6 +496,7 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
         }
         setTemperatureECS(resp.temperatureECS.toFloat());
         setTemperatureCDC(resp.temperatureCDC.toFloat());
+        _chaudiere.setTemperatureFumees(resp.temperatureFumees.toFloat()/2);
         _chaudiere.setPuissanceInstantaneeECS(resp.puissanceInstantaneeECS.toFloat());
         _chaudiere.setPuissanceInstantaneeChauffage(resp.puissanceInstantaneeChauffage.toFloat());
         setPression(resp.pression.toFloat());
