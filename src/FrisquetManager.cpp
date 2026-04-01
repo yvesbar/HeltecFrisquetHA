@@ -100,7 +100,7 @@ void FrisquetManager::loop()
 {
     uint32_t now = millis();
 
-    if (FrisquetRadio::receivedFlag) { // Réception données radio
+    if (FrisquetRadio::receivedFlag || _radio.hasBufferedPacket()) { // Réception données radio
         onRadioReceive();
     }
 
@@ -169,16 +169,22 @@ void FrisquetManager::onRadioReceive()
 
     byte buff[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
     size_t length = 0;
-    int16_t err = _radio.readData(buff, 0);
+    int16_t err = RADIOLIB_ERR_NONE;
 
-    if (err != RADIOLIB_ERR_NONE)
-    {
-        FrisquetRadio::interruptReceive = false;
-        return;
+    if (_radio.popBufferedPacket(buff, length)) {
+        info("[RADIO] Réutilisation paquet bufferisé : %d bytes", length);
+    } else {
+        err = _radio.readData(buff, 0);
+
+        if (err != RADIOLIB_ERR_NONE)
+        {
+            FrisquetRadio::interruptReceive = false;
+            return;
+        }
+
+        length = _radio.getPacketLength();
+        _radio.startReceive();
     }
-
-    length = _radio.getPacketLength();
-    _radio.startReceive();
 
     info("[RADIO] Réception données radio : %d bytes", length);
 

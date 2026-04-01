@@ -5,6 +5,92 @@
 bool FrisquetRadio::receivedFlag = false;
 bool FrisquetRadio::interruptReceive = false;
 
+void FrisquetRadio::purgeBufferedPackets() {
+    const uint32_t now = millis();
+    for (BufferedPacket& packet : _rxBuffer) {
+        if (packet.used && (now - packet.timestamp > RX_PACKET_TTL_MS)) {
+            if (packet.length >= sizeof(RadioTrameHeader)) {
+                RadioTrameHeader header;
+                memcpy(&header, packet.data, sizeof(header));
+                info("[RADIO][BUFFER] Expiration paquet %d->%d msg=%d rec=%d type=0x%02X len=%d",
+                    header.idExpediteur, header.idDestinataire, header.idMessage, header.idReception, header.type, packet.length);
+            } else {
+                info("[RADIO][BUFFER] Expiration paquet invalide len=%d", packet.length);
+            }
+            packet.used = false;
+            packet.length = 0;
+        }
+    }
+}
+
+bool FrisquetRadio::bufferUnexpectedPacket(const byte* donnees, size_t length) {
+    purgeBufferedPackets();
+
+    if (length == 0 || length > RADIOLIB_SX126X_MAX_PACKET_LENGTH) {
+        return false;
+    }
+
+    for (BufferedPacket& packet : _rxBuffer) {
+        if (!packet.used) {
+            packet.used = true;
+            packet.timestamp = millis();
+            packet.length = length;
+            memcpy(packet.data, donnees, length);
+            if (length >= sizeof(RadioTrameHeader)) {
+                RadioTrameHeader header;
+                memcpy(&header, donnees, sizeof(header));
+                info("[RADIO][BUFFER] Insertion paquet %d->%d msg=%d rec=%d type=0x%02X len=%d",
+                    header.idExpediteur, header.idDestinataire, header.idMessage, header.idReception, header.type, length);
+            } else {
+                info("[RADIO][BUFFER] Insertion paquet invalide len=%d", length);
+            }
+            return true;
+        }
+    }
+
+    info("[RADIO][BUFFER] Buffer plein, paquet ignore len=%d", length);
+    return false;
+}
+
+bool FrisquetRadio::popBufferedPacket(byte* donnees, size_t& length) {
+    purgeBufferedPackets();
+
+    for (BufferedPacket& packet : _rxBuffer) {
+        if (!packet.used) {
+            continue;
+        }
+
+        if (length == 0 || packet.length < length) {
+            length = packet.length;
+        }
+
+        memcpy(donnees, packet.data, length);
+        if (length >= sizeof(RadioTrameHeader)) {
+            RadioTrameHeader header;
+            memcpy(&header, donnees, sizeof(header));
+            info("[RADIO][BUFFER] Depilement paquet %d->%d msg=%d rec=%d type=0x%02X len=%d",
+                header.idExpediteur, header.idDestinataire, header.idMessage, header.idReception, header.type, length);
+        } else {
+            info("[RADIO][BUFFER] Depilement paquet invalide len=%d", length);
+        }
+        packet.used = false;
+        packet.length = 0;
+        return true;
+    }
+
+    return false;
+}
+
+bool FrisquetRadio::hasBufferedPacket() {
+    purgeBufferedPackets();
+    for (BufferedPacket& packet : _rxBuffer) {
+        if (packet.used) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int16_t FrisquetRadio::sendAsk(
     uint8_t idExpediteur, 
     uint8_t idDestinataire, 
@@ -217,6 +303,7 @@ int16_t FrisquetRadio::receiveExpected(
                 err = RADIOLIB_ERR_ADDRESS_NOT_FOUND;
                 break;
             }
+            bufferUnexpectedPacket(buff, len);
             err = RADIOLIB_ERR_RX_TIMEOUT;
         }
     } while (--retry > 0);

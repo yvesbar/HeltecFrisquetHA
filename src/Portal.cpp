@@ -1544,7 +1544,13 @@ let savedCfg = {
   useDS18B20: false,
   useZone1: false,
   useZone2: false,
-  useZone3: false
+  useZone3: false,
+  useSatelliteZ1: false,
+  useSatelliteZ2: false,
+  useSatelliteZ3: false,
+  useSatelliteVirtualZ1: false,
+  useSatelliteVirtualZ2: false,
+  useSatelliteVirtualZ3: false
 };
 
 const FIELDS = [
@@ -1573,9 +1579,9 @@ function updatePairButtons() {
   const btnZ2 = $("#btnPairSatZ2");
   const btnZ3 = $("#btnPairSatZ3");
 
-  if (btnZ1) btnZ1.style.display = savedCfg.useZone1 ? "inline-flex" : "none";
-  if (btnZ2) btnZ2.style.display = savedCfg.useZone2 ? "inline-flex" : "none";
-  if (btnZ3) btnZ3.style.display = savedCfg.useZone3 ? "inline-flex" : "none";
+  if (btnZ1) btnZ1.style.display = savedCfg.useSatelliteZ1 && savedCfg.useSatelliteVirtualZ1 ? "inline-flex" : "none";
+  if (btnZ2) btnZ2.style.display = savedCfg.useSatelliteZ2 && savedCfg.useSatelliteVirtualZ2 ? "inline-flex" : "none";
+  if (btnZ3) btnZ3.style.display = savedCfg.useSatelliteZ3 && savedCfg.useSatelliteVirtualZ3 ? "inline-flex" : "none";
 }
 
 
@@ -1600,6 +1606,12 @@ async function loadConfig() {
     savedCfg.useZone1 = !!j.useZone1;
     savedCfg.useZone2 = !!j.useZone2;
     savedCfg.useZone3 = !!j.useZone3;
+    savedCfg.useSatelliteZ1 = !!j.useSatelliteZ1;
+    savedCfg.useSatelliteZ2 = !!j.useSatelliteZ2;
+    savedCfg.useSatelliteZ3 = !!j.useSatelliteZ3;
+    savedCfg.useSatelliteVirtualZ1 = !!j.useSatelliteVirtualZ1;
+    savedCfg.useSatelliteVirtualZ2 = !!j.useSatelliteVirtualZ2;
+    savedCfg.useSatelliteVirtualZ3 = !!j.useSatelliteVirtualZ3;
     const selConnectMode = $("#useConnectMode");
     if (selConnectMode) {
       if (!j.useConnect) {
@@ -1620,13 +1632,13 @@ async function loadConfig() {
     const selZoneMode2 = $("#useZoneMode2");
     const selZoneMode3 = $("#useZoneMode3");
     if (selZoneMode1) {
-      selZoneMode1.value = !j.useZone1 ? "0" : (j.useSatelliteVirtualZ1 ? "2" : "1");
+      selZoneMode1.value = !j.useSatelliteZ1 ? "0" : (j.useSatelliteVirtualZ1 ? "2" : "1");
     }
     if (selZoneMode2) {
-      selZoneMode2.value = !j.useZone2 ? "0" : (j.useSatelliteVirtualZ2 ? "2" : "1");
+      selZoneMode2.value = !j.useSatelliteZ2 ? "0" : (j.useSatelliteVirtualZ2 ? "2" : "1");
     }
     if (selZoneMode3) {
-      selZoneMode3.value = !j.useZone3 ? "0" : (j.useSatelliteVirtualZ3 ? "2" : "1");
+      selZoneMode3.value = !j.useSatelliteZ3 ? "0" : (j.useSatelliteVirtualZ3 ? "2" : "1");
     }
     FIELDS.forEach(id => {
       const el = $("#"+id);
