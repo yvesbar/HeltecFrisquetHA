@@ -5,6 +5,8 @@
 
 class FrisquetRadio : public Radio {
     public: 
+    static constexpr uint8_t RX_BUFFER_SIZE = 6;
+    static constexpr uint32_t RX_PACKET_TTL_MS = 1000;
 
     enum MessageType : byte {
         READ = 0x03,
@@ -102,6 +104,21 @@ class FrisquetRadio : public Radio {
 
     void setNetworkID(NetworkID networkID);
 
+    bool popBufferedPacket(byte* donnees, size_t& length);
+    bool hasBufferedPacket();
+
     static bool receivedFlag;
     static bool interruptReceive;
+
+    private:
+    struct BufferedPacket {
+        bool used = false;
+        uint32_t timestamp = 0;
+        size_t length = 0;
+        byte data[RADIOLIB_SX126X_MAX_PACKET_LENGTH] = {0};
+    };
+
+    void purgeBufferedPackets();
+    bool bufferUnexpectedPacket(const byte* donnees, size_t length);
+    BufferedPacket _rxBuffer[RX_BUFFER_SIZE];
 };

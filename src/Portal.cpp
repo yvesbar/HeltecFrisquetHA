@@ -1393,11 +1393,13 @@ String Portal::html() {
 
           <div class='grid-2'>
             <div class='row'>
-              <label class='check-row'>
-                <input id='useConnect' type='checkbox'>
-                <span>Activer Connect</span>
-                <div class='hint'>Active la passerelle Connect Frisquet.</div>
-              </label>
+              <label>Mode Connect</label>
+              <select id='useConnectMode'>
+                <option value='0'>Ne pas utiliser le système Connect</option>
+                <option value='1'>Utiliser le Frisquet Connect virtuel</option>
+                <option value='2'>Utiliser le Frisquet Connect physique (écoute uniquement)</option>
+              </select>
+              <div class='hint'>Le mode virtuel permet l'association et l'envoi de commandes, le mode physique est passif.</div>
             </div>
 
             <div class="row">
@@ -1406,30 +1408,17 @@ String Portal::html() {
               </button>
             </div>
           </div>
-          <div class='grid-2' style='margin-top:8px'>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useConnectPassive' type='checkbox'>
-                <span>Mode passif Connect</span>
-                <div class='hint'>N'envoie aucune trame, écoute seulement les réponses chaudière.</div>
-              </label>
-            </div>
-          </div>
 
           <div class='grid-3' style="margin-top:10px">
             <div class='row'>
-              <label class='check-row'>
-                <input id='useSondeExt' type='checkbox'>
-                <span>Activer sonde extérieure</span>
-              </label>
-              <div class='hint'>Utilise la sonde extérieure radio Frisquet.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useDS18B20' type='checkbox'>
-                <span>Utiliser DS18B20</span>
-              </label>
-              <div class='hint'>Active l'utilisation d'un capteur de température filaire.</div>
+              <label>Mode Sonde extérieure</label>
+              <select id='useSondeMode'>
+                <option value='0'>Ne pas utiliser la sonde extérieure</option>
+                <option value='1'>Sonde extérieure Frisquet</option>
+                <option value='2'>Sonde extérieure virtuelle</option>
+                <option value='3'>Sonde extérieure avec DS18B20</option>
+              </select>
+              <div class='hint'>Les modes 0 et 1 n'activent pas la sonde extérieure.</div>
             </div>
             <div class='row'>
               <button type='button' class='btn btn-sm' id='btnPairSondeExt' style='margin-top:6px;display:none'>
@@ -1437,99 +1426,41 @@ String Portal::html() {
               </button>
             </div>
           </div>
-          <div class='grid-3' style='margin-top:8px'>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone1' type='checkbox'>
-                <span>Zone 1 présente</span>
-              </label>
-              <div class='hint'>Zone 1 physique présente.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone2' type='checkbox'>
-                <span>Zone 2 présente</span>
-              </label>
-              <div class='hint'>Zone 2 physique présente.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone3' type='checkbox'>
-                <span>Zone 3 présente</span>
-              </label>
-              <div class='hint'>Zone 3 physique présente.</div>
-            </div>
-          </div>
-
           <hr />
-
-          <h4>Chaudières non-compatible Connect :</h4>
+          <h4>Gestion des zones</h4>
 
           <div class='grid-3' style="margin-top:10px">
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ1' type='checkbox'>
-                <span>Satellite Z1</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z1.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ1'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z1.
-                </div>
-              </div>
-
+              <label>Mode Zone 1</label>
+              <select id='useZoneMode1'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ1' style='margin-top:6px;display:none'>
                 Associer le Satellite Z1
               </button>
             </div>
 
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ2' type='checkbox'>
-                <span>Satellite Z2</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z2.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ2'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z2.
-                </div>
-              </div>
-
+              <label>Mode Zone 2</label>
+              <select id='useZoneMode2'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ2' style='margin-top:6px;display:none'>
                 Associer le Satellite Z2
               </button>
             </div>
 
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ3' type='checkbox'>
-                <span>Satellite Z3</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z3.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ3'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z3.
-                </div>
-              </div>
-
+              <label>Mode Zone 3</label>
+              <select id='useZoneMode3'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ3' style='margin-top:6px;display:none'>
                 Associer le Satellite Z3
               </button>
@@ -1569,14 +1500,6 @@ String Portal::html() {
           <span>Reset&nbsp;:</span>
           <span id='badgeReset' class='warn'>inconnu</span>
         </span>
-        <span class='badge'>
-          <span>Heap&nbsp;:</span>
-          <span id='badgeHeap' class='warn'>inconnu</span>
-        </span>
-        <span class='badge'>
-          <span>Min heap&nbsp;:</span>
-          <span id='badgeMinHeap' class='warn'>inconnu</span>
-        </span>
       </div>
       <div class='row' style='margin-top:8px'>
         <div class='hint'>
@@ -1614,63 +1537,51 @@ String Portal::html() {
 const $ = sel => document.querySelector(sel);
 const msg = (t) => { const m=$("#msg"); if(!m) return; m.textContent=t; m.classList.add("show"); };
 const fwMsg = (t) => { const m=$("#fwMsg"); if(!m) return; m.textContent=t; m.classList.add("show"); };
+let savedCfg = {
+  useConnect: false,
+  useConnectPassive: false,
+  useSondeExt: false,
+  useDS18B20: false,
+  useZone1: false,
+  useZone2: false,
+  useZone3: false,
+  useSatelliteZ1: false,
+  useSatelliteZ2: false,
+  useSatelliteZ3: false,
+  useSatelliteVirtualZ1: false,
+  useSatelliteVirtualZ2: false,
+  useSatelliteVirtualZ3: false
+};
 
 const FIELDS = [
   "wifiHostname","wifiSsid","wifiPass","wifiStatic","wifiIp","wifiGw","wifiMask","wifiDns1","wifiDns2",
   "mqttHost","mqttPort","mqttUser","mqttPass",
   "mqttClientId","mqttBaseTopic",
-  "networkID","useConnect","useConnectPassive","useSondeExt","useDS18B20",
-  "useZone1","useZone2","useZone3",
-  "useSatelliteZ1","useSatelliteZ2","useSatelliteZ3",
-  "useSatelliteVirtualZ1","useSatelliteVirtualZ2","useSatelliteVirtualZ3"
+  "networkID"
 ];
 
 function updatePairButtons() {
-  const chkConnect = $("#useConnect");
-  const chkConnectPassive = $("#useConnectPassive");
-  const chkSonde   = $("#useSondeExt");
+  const selConnectMode = $("#useConnectMode");
+  const selSondeMode = $("#useSondeMode");
   const btnConnect = $("#btnPairConnect");
   const btnSonde   = $("#btnPairSondeExt");
 
-  if (chkConnect && btnConnect) {
-    const passive = chkConnectPassive && chkConnectPassive.checked;
-    btnConnect.style.display = (chkConnect.checked && !passive) ? "inline-flex" : "none";
+  if (selConnectMode && btnConnect) {
+    const canPairConnect = savedCfg.useConnect && !savedCfg.useConnectPassive;
+    btnConnect.style.display = canPairConnect ? "inline-flex" : "none";
   }
-  if (chkConnectPassive) {
-    chkConnectPassive.disabled = !chkConnect || !chkConnect.checked;
-    if (chkConnectPassive.disabled) {
-      chkConnectPassive.checked = false;
-    }
-  }
-  if (chkSonde && btnSonde) {
-    btnSonde.style.display = chkSonde.checked ? "inline-flex" : "none";
+  if (selSondeMode && btnSonde) {
+    btnSonde.style.display = savedCfg.useSondeExt ? "inline-flex" : "none";
   }
 
 
-  const chkZ1 = $("#useSatelliteZ1");
-  const chkZ2 = $("#useSatelliteZ2");
-  const chkZ3 = $("#useSatelliteZ3");
   const btnZ1 = $("#btnPairSatZ1");
   const btnZ2 = $("#btnPairSatZ2");
   const btnZ3 = $("#btnPairSatZ3");
 
-  if (chkZ1 && btnZ1) {
-    btnZ1.style.display = chkZ1.checked ? "inline-flex" : "none";
-  }
-  if (chkZ2 && btnZ2) {
-    btnZ2.style.display = chkZ2.checked ? "inline-flex" : "none";
-  }
-  if (chkZ3 && btnZ3) {
-    btnZ3.style.display = chkZ3.checked ? "inline-flex" : "none";
-  }
-
-  // Pair buttons visibility should also consider whether the corresponding zone is present
-  const chkZone1 = $("#useZone1");
-  const chkZone2 = $("#useZone2");
-  const chkZone3 = $("#useZone3");
-  if (btnZ1 && chkZone1) btnZ1.style.display = (chkZ1.checked && chkZone1.checked) ? "inline-flex" : "none";
-  if (btnZ2 && chkZone2) btnZ2.style.display = (chkZ2.checked && chkZone2.checked) ? "inline-flex" : "none";
-  if (btnZ3 && chkZone3) btnZ3.style.display = (chkZ3.checked && chkZone3.checked) ? "inline-flex" : "none";
+  if (btnZ1) btnZ1.style.display = savedCfg.useSatelliteZ1 && savedCfg.useSatelliteVirtualZ1 ? "inline-flex" : "none";
+  if (btnZ2) btnZ2.style.display = savedCfg.useSatelliteZ2 && savedCfg.useSatelliteVirtualZ2 ? "inline-flex" : "none";
+  if (btnZ3) btnZ3.style.display = savedCfg.useSatelliteZ3 && savedCfg.useSatelliteVirtualZ3 ? "inline-flex" : "none";
 }
 
 
@@ -1688,6 +1599,47 @@ async function loadConfig() {
   try {
     const r = await fetch("/api/config",{cache:"no-store"});
     const j = await r.json();
+    savedCfg.useConnect = !!j.useConnect;
+    savedCfg.useConnectPassive = !!j.useConnectPassive;
+    savedCfg.useSondeExt = !!j.useSondeExt;
+    savedCfg.useDS18B20 = !!j.useDS18B20;
+    savedCfg.useZone1 = !!j.useZone1;
+    savedCfg.useZone2 = !!j.useZone2;
+    savedCfg.useZone3 = !!j.useZone3;
+    savedCfg.useSatelliteZ1 = !!j.useSatelliteZ1;
+    savedCfg.useSatelliteZ2 = !!j.useSatelliteZ2;
+    savedCfg.useSatelliteZ3 = !!j.useSatelliteZ3;
+    savedCfg.useSatelliteVirtualZ1 = !!j.useSatelliteVirtualZ1;
+    savedCfg.useSatelliteVirtualZ2 = !!j.useSatelliteVirtualZ2;
+    savedCfg.useSatelliteVirtualZ3 = !!j.useSatelliteVirtualZ3;
+    const selConnectMode = $("#useConnectMode");
+    if (selConnectMode) {
+      if (!j.useConnect) {
+        selConnectMode.value = "0";
+      } else {
+        selConnectMode.value = j.useConnectPassive ? "2" : "1";
+      }
+    }
+    const selSondeMode = $("#useSondeMode");
+    if (selSondeMode) {
+      if (!j.useSondeExt) {
+        selSondeMode.value = "0";
+      } else {
+        selSondeMode.value = j.useDS18B20 ? "3" : "2";
+      }
+    }
+    const selZoneMode1 = $("#useZoneMode1");
+    const selZoneMode2 = $("#useZoneMode2");
+    const selZoneMode3 = $("#useZoneMode3");
+    if (selZoneMode1) {
+      selZoneMode1.value = !j.useSatelliteZ1 ? "0" : (j.useSatelliteVirtualZ1 ? "2" : "1");
+    }
+    if (selZoneMode2) {
+      selZoneMode2.value = !j.useSatelliteZ2 ? "0" : (j.useSatelliteVirtualZ2 ? "2" : "1");
+    }
+    if (selZoneMode3) {
+      selZoneMode3.value = !j.useSatelliteZ3 ? "0" : (j.useSatelliteVirtualZ3 ? "2" : "1");
+    }
     FIELDS.forEach(id => {
       const el = $("#"+id);
       if (!el || j[id] === undefined) return;
@@ -1710,6 +1662,41 @@ async function loadConfig() {
 async function saveConfig(e) {
   e.preventDefault();
   const fd = new FormData();
+
+  const selConnectMode = document.querySelector('#useConnectMode');
+  if (selConnectMode) {
+    const mode = selConnectMode.value;
+    fd.append("useConnect", mode === "1" || mode === "2" ? "true" : "false");
+    fd.append("useConnectPassive", mode === "2" ? "true" : "false");
+  }
+  const selSondeMode = document.querySelector('#useSondeMode');
+  if (selSondeMode) {
+    const mode = selSondeMode.value;
+    fd.append("useSondeExt", mode === "2" || mode === "3" ? "true" : "false");
+    fd.append("useDS18B20", mode === "3" ? "true" : "false");
+  }
+  const selZoneMode1 = document.querySelector('#useZoneMode1');
+  if (selZoneMode1) {
+    const mode = selZoneMode1.value;
+    fd.append("useZone1", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ1", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ1", mode === "2" ? "true" : "false");
+  }
+  const selZoneMode2 = document.querySelector('#useZoneMode2');
+  if (selZoneMode2) {
+    const mode = selZoneMode2.value;
+    fd.append("useZone2", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ2", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ2", mode === "2" ? "true" : "false");
+  }
+  const selZoneMode3 = document.querySelector('#useZoneMode3');
+  if (selZoneMode3) {
+    const mode = selZoneMode3.value;
+    fd.append("useZone3", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ3", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ3", mode === "2" ? "true" : "false");
+  }
+
   FIELDS.forEach(id => {
     const el = document.querySelector('#'+id);
     if (!el) return;
@@ -1798,23 +1785,11 @@ async function loadStatus() {
     setBadge("badgeSta", j.staConnected, staText);
     setBadge("badgeUptime", true, formatUptime(j.uptimeSec));
     setBadge("badgeReset", true, j.resetReason || "inconnu");
-    if (typeof j.freeHeap === "number") {
-      setBadge("badgeHeap", true, j.freeHeap + " o");
-    } else {
-      setBadge("badgeHeap", false, "indisponible");
-    }
-    if (typeof j.minFreeHeap === "number") {
-      setBadge("badgeMinHeap", true, j.minFreeHeap + " o");
-    } else {
-      setBadge("badgeMinHeap", false, "indisponible");
-    }
   } catch (e) {
     setBadge("badgeAp", false, "indisponible");
     setBadge("badgeSta", false, "indisponible");
     setBadge("badgeUptime", false, "indisponible");
     setBadge("badgeReset", false, "indisponible");
-    setBadge("badgeHeap", false, "indisponible");
-    setBadge("badgeMinHeap", false, "indisponible");
   }
 }
 
@@ -1941,25 +1916,17 @@ if (fwForm) {
     });
   }
 
-  const chkConnect = $("#useConnect");
-  const chkConnectPassive = $("#useConnectPassive");
-  const chkSonde   = $("#useSondeExt");
-  const chkZ1      = $("#useSatelliteZ1");
-  const chkZ2      = $("#useSatelliteZ2");
-  const chkZ3      = $("#useSatelliteZ3");
-  const chkZone1   = $("#useZone1");
-  const chkZone2   = $("#useZone2");
-  const chkZone3   = $("#useZone3");
+  const selConnectMode = $("#useConnectMode");
+  const selSondeMode = $("#useSondeMode");
+  const selZoneMode1 = $("#useZoneMode1");
+  const selZoneMode2 = $("#useZoneMode2");
+  const selZoneMode3 = $("#useZoneMode3");
 
-  if (chkConnect) chkConnect.addEventListener("change", updatePairButtons);
-  if (chkConnectPassive) chkConnectPassive.addEventListener("change", updatePairButtons);
-  if (chkSonde)   chkSonde.addEventListener("change", updatePairButtons);
-  if (chkZ1)      chkZ1.addEventListener("change", updatePairButtons);
-  if (chkZ2)      chkZ2.addEventListener("change", updatePairButtons);
-  if (chkZ3)      chkZ3.addEventListener("change", updatePairButtons);
-  if (chkZone1)   chkZone1.addEventListener("change", updatePairButtons);
-  if (chkZone2)   chkZone2.addEventListener("change", updatePairButtons);
-  if (chkZone3)   chkZone3.addEventListener("change", updatePairButtons);
+  if (selConnectMode) selConnectMode.addEventListener("change", updatePairButtons);
+  if (selSondeMode) selSondeMode.addEventListener("change", updatePairButtons);
+  if (selZoneMode1) selZoneMode1.addEventListener("change", updatePairButtons);
+  if (selZoneMode2) selZoneMode2.addEventListener("change", updatePairButtons);
+  if (selZoneMode3) selZoneMode3.addEventListener("change", updatePairButtons);
   const btnPairConnect = $("#btnPairConnect");
   const btnPairSonde   = $("#btnPairSondeExt");
   const btnPairSatZ1   = $("#btnPairSatZ1");

@@ -9,6 +9,8 @@
 class Satellite : public FrisquetDevice {
     
     public:
+        static constexpr uint8_t MODE_CONNECT_COMPAT_XOR = 0x20;
+
         enum MODE : uint8_t {
             REDUIT_PERMANENT = 0x00,
             CONFORT_PERMANENT = 0x01,
@@ -38,6 +40,7 @@ class Satellite : public FrisquetDevice {
 
         MODE getMode();
         void setMode(MODE mode);
+        void setModeFromRaw(uint8_t rawMode);
         String getNomMode();
 
         void setEcrasement(bool ecrasement) { _ecrasement = ecrasement; }
@@ -58,6 +61,10 @@ class Satellite : public FrisquetDevice {
         uint32_t _lastRecuperationTemperatureCDC = 0;
         bool _modeVirtuel = false;
         bool _ecrasement = false;
+        bool _modeCompatConnect = false;
+
+        MODE decodeModeFromRaw(uint8_t rawMode, bool* compatConnect = nullptr) const;
+        uint8_t encodeModeForSend(MODE mode) const;
         struct {
             MqttEntity ecrasementConsigne;
         } _mqttEntities;

@@ -50,7 +50,7 @@ bool FrisquetDevice::associer(NetworkID& networkId, uint8_t& idAssociation) {
 
             logRadio(false, (byte*)&confirmPayload, sizeof(confirmPayload));
 
-            for(uint8_t i = 0; i < 5; i++) {
+            for(uint8_t i = 0; i < 10; i++) {
                 err = radio().transmit((byte*)&confirmPayload, sizeof(confirmPayload));
                 if (err != RADIOLIB_ERR_NONE) {
                     continue;
@@ -62,6 +62,8 @@ bool FrisquetDevice::associer(NetworkID& networkId, uint8_t& idAssociation) {
             networkId = confirmPayload.networkID;
             
             radio().setNetworkID(networkId);
+
+            delay(5000); // Attente 5 secondes
             return true;
         }
     } while(millis() < timeout);

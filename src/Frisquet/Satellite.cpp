@@ -380,6 +380,8 @@ bool Satellite::envoyerConsigne() {
         payload.mode = MODE::HORS_GEL;
         payload.temperatureConsigne = isnan(_zone.getTemperatureHorsGel()) ? 8.0f : _zone.getTemperatureHorsGel();
     } 
+
+    payload.mode = encodeModeForSend((MODE)payload.mode);
     
     size_t length = 0;
     int16_t err;
@@ -428,6 +430,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
 
     //info("[SATELLITE Z] Interception envoi consigne.", header->type);
     if(!_modeVirtuel) {
+
         if(length == 23 && header->type == FrisquetRadio::MessageType::INIT && header->idExpediteur == this->getId() && header->idMessage != getIdMessage()) { // Réception en écoute
             FrisquetRadio::RadioTrameInit* requete = (FrisquetRadio::RadioTrameInit*) readBuffer.getBytes(sizeof(FrisquetRadio::RadioTrameInit));
             if(requete->adresseMemoireEcriture.toUInt16() == 0xA02F && requete->tailleMemoireEcriture.toUInt16() == 0x0004) { // Envoi consigne
@@ -508,7 +511,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                 _zone.setTemperatureAmbiante(donneesSatellite->temperatureAmbiante.toFloat());
                 
                 if(! getEcrasement()) {
-                    setMode((MODE)donneesSatellite->mode);
+                    setModeFromRaw(donneesSatellite->mode);
                     _zone.setTemperatureConsigne(donneesSatellite->temperatureConsigne.toFloat());
                     saveConfig();
                     _zone.saveConfig();
@@ -518,7 +521,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                 }
 
                 if(getMode() == MODE::INCONNU) {
-                    setMode((MODE)donneesSatellite->mode);
+                    setModeFromRaw(donneesSatellite->mode);
                 }
                 if(isnan(_zone.getTemperatureConsigne())) {
                     _zone.setTemperatureConsigne(donneesSatellite->temperatureConsigne.toFloat());
@@ -615,4 +618,70 @@ void Satellite::setMode(Satellite::MODE mode) {
             _zone.setMode(Zone::MODE_ZONE::HORS_GEL);
             break;
     }
+}
+
+Satellite::MODE Satellite::decodeModeFromRaw(uint8_t rawMode, bool* compatConnect) const {
+    auto decodeDirect = [](uint8_t modeValue) -> MODE {
+        switch (modeValue) {
+            case MODE::REDUIT_PERMANENT:
+            case MODE::CONFORT_PERMANENT:
+            case MODE::REDUIT_DEROGATION:
+            case MODE::CONFORT_DEROGATION:
+            case MODE::REDUIT_AUTO:
+            case MODE::CONFORT_AUTO:
+            case MODE::HORS_GEL:
+                return (MODE)modeValue;
+            default:
+                return MODE::INCONNU;
+        }
+    };
+
+    MODE direct = decodeDirect(rawMode);
+    if (direct != MODE::INCONNU) {
+        if (compatConnect) {
+            *compatConnect = false;
+        }
+        return direct;
+    }
+
+    uint8_t xorMode = rawMode ^ MODE_CONNECT_COMPAT_XOR;
+    MODE decodedXor = decodeDirect(xorMode);
+    if (decodedXor != MODE::INCONNU) {
+        if (compatConnect) {
+            *compatConnect = true;
+        }
+        return decodedXor;
+    }
+
+    if (compatConnect) {
+        *compatConnect = false;
+    }
+    return MODE::INCONNU;
+}
+
+uint8_t Satellite::encodeModeForSend(Satellite::MODE mode) const {
+    uint8_t rawMode = (uint8_t)mode;
+    if (_modeCompatConnect) {
+        rawMode ^= MODE_CONNECT_COMPAT_XOR;
+    }
+    return rawMode;
+}
+
+void Satellite::setModeFromRaw(uint8_t rawMode) {
+    bool compatConnect = false;
+    MODE decodedMode = decodeModeFromRaw(rawMode, &compatConnect);
+    _modeCompatConnect = compatConnect;
+
+    if (decodedMode == MODE::INCONNU) {
+        char hexMode[5];
+        snprintf(hexMode, sizeof(hexMode), "%02X", rawMode);
+        warning(String("[SATELLITE Z") + String(getNumeroZone()) + "] Mode satellite inconnu: 0x" + String(hexMode));
+        return;
+    }
+
+    if (_modeCompatConnect) {
+        debug("[SATELLITE Z%d] Mode avec compatibilité Connect détectée (XOR 0x20).", getNumeroZone());
+    }
+
+    setMode(decodedMode);
 }
