@@ -74,6 +74,8 @@ class Connect : public FrisquetDevice {
         void setPression(float pression);
         float getPression();
         bool handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buff, size_t length);
+        void setModeECSFromRaw(uint8_t rawModeECS);
+        uint8_t encodeModeECSForSend();
 
         void envoiZones();
 
@@ -85,4 +87,5 @@ class Connect : public FrisquetDevice {
         uint32_t _lastRecuperationModeECS = 0;
         uint32_t _lastRecuperationConsommation = 0;
         uint32_t _lastEnvoiZone = 0;
+        uint8_t _modeECSFrameBits = 0x01;
 };

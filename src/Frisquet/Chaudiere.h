@@ -46,12 +46,12 @@ public:
 
     enum MODE_ECS : uint8_t {
         INCONNU = 0XFF,
-        STOP = 0x29,
-        MAX = 0x01,
-        ECO = 0x09,
-        ECO_HORAIRES = 0x11,
-        ECOPLUS = 0x19,
-        ECOPLUS_HORAIRES = 0x21
+        STOP = 0x28,
+        MAX = 0x00,
+        ECO = 0x08,
+        ECO_HORAIRES = 0x10,
+        ECOPLUS = 0x18,
+        ECOPLUS_HORAIRES = 0x20
     };
 
     Chaudiere(MqttManager& mqtt, Config& cfg) : _mqtt(mqtt), _cfg(cfg) {}
