@@ -335,10 +335,7 @@ bool Connect::recupererModeECS() {
             continue;
         }
         
-        uint8_t raw = buff.modeECS;
-        uint8_t masked = raw & 0x7F;
-        info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X", raw, masked);
-        setModeECS((MODE_ECS)masked);
+        setModeECSFromRaw(buff.modeECS);
 
         return true;
     } while(retry++ < 1);
@@ -357,6 +354,17 @@ bool Connect::setModeECS(MODE_ECS modeECS) {
 }
 bool Connect::setModeECS(const String& modeECS) {
     return _chaudiere.setModeECS(modeECS);
+}
+
+void Connect::setModeECSFromRaw(uint8_t rawModeECS) {
+    _modeECSFrameBits = rawModeECS & 0x81;
+    uint8_t masked = rawModeECS & 0x7E;
+    info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X, bits trame=0x%02X", rawModeECS, masked, _modeECSFrameBits);
+    setModeECS((MODE_ECS)masked);
+}
+
+uint8_t Connect::encodeModeECSForSend() {
+    return ((uint8_t)getModeECS() & 0x7E) | _modeECSFrameBits;
 }
 
 void Connect::handleModeEcsCommand(const String& payload) {
@@ -386,7 +394,8 @@ bool Connect::envoyerModeECS() {
         uint8_t modeECS = 0x00; 
     } payload;
     
-    payload.modeECS = getModeECS();
+    payload.modeECS = encodeModeECSForSend();
+    info("[CONNECT] modeECS envoyé=0x%02X (mode=0x%02X, bits trame=0x%02X)", payload.modeECS, (uint8_t)getModeECS(), _modeECSFrameBits);
     
     byte buff[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
     size_t length = 0;
@@ -565,10 +574,7 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
         }
         memcpy(&resp, buff, sizeof(resp));
 
-        uint8_t raw = resp.modeECS;
-        uint8_t masked = raw & 0x7F;
-        info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X", raw, masked);
-        setModeECS((MODE_ECS)masked);
+        setModeECSFromRaw(resp.modeECS);
         _lastRecuperationModeECS = millis();
         publishMqtt();
         return true;
