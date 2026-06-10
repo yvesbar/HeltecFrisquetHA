@@ -6,6 +6,7 @@
 #include <cstring>
 #include <esp_system.h>
 #include "Frisquet/NetworkID.h" 
+#include "Version.h"
 
 // Déclaration du logger global défini dans Logs.cpp
 extern Logs logs;
@@ -1212,7 +1213,7 @@ void Portal::startAp() {
 }
 
 String Portal::html() {
-  return R"HTML(
+  String page = R"HTML(
 <!DOCTYPE html><html lang='fr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
@@ -1529,7 +1530,7 @@ String Portal::html() {
   </div>
 
   <div class='footer'>
-    Portail de configuration – OpenFrisquetVisio
+    Portail de configuration – OpenFrisquetVisio · version {{OPENFRISQUETVISIO_VERSION}}
   </div>
 </div>
 
@@ -1959,6 +1960,8 @@ if (fwForm) {
 
 </body></html>
 )HTML";
+  page.replace("{{OPENFRISQUETVISIO_VERSION}}", OPENFRISQUETVISIO_VERSION);
+  return page;
 }
 
 
