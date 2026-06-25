@@ -1,6 +1,6 @@
-# 🧠 Frisquet Connect (ESP32 SX1262)
+# 🧠 OpenFrisquetVisio
 
-Emulation complète du module **Frisquet Connect** sur base **Heltec ESP32 WiFi LoRa 32 (SX1262)**.  
+Emulation complète du module **Frisquet Connect**, **sonde Extérieure** ou encore **satellite d'ambiance** sur base **Heltec ESP32 WiFi LoRa 32 (SX1262)**.  
 Ce projet permet à un ESP32 de dialoguer directement avec votre chaudière Frisquet,  
 de récupérer les informations en temps réel et de les exposer à **Home Assistant via MQTT**.
 
@@ -16,6 +16,7 @@ de récupérer les informations en temps réel et de les exposer à **Home Assis
   - **Pression** du circuit (bar)
   - **Consommation gaz** ECS et chauffage (veille)
   - **Affichage et séléction du mode ECS** (Max, Eco, Eco Horaires Eco+, Eco+ Horaires, Stop)
+- **Mode Connect passif** : écoute des échanges chaudière sans émettre de trame (utile si une box Connect est déjà installée).
 - Gestion des **zones 1, 2 et 3** :
   - Température **départ eau**
   - Température **ambiante** (si source Connect)
@@ -50,6 +51,7 @@ Deux modes possibles :
 - Visualisation des **logs**
 - Informations système et réseau
 - Envoi de trame radio personnalisée (debug)
+- Lecture de zones mémoire (debug)
 
 ### 🔁 Mise à jour OTA
 - Mise à jour du firmware directement via WiFi
@@ -91,12 +93,13 @@ Avant le flash :
 
 ### 3️⃣ Configuration via le portail web
 
-1. Se connecter au WiFi créé : `HeltecFrisquet-Setup`, mot de passe `frisquetconfig`
+1. Se connecter au WiFi créé : `OpenFrisquetVisio-Setup`, mot de passe `frisquetconfig`
 2. Ouvrir un navigateur sur `192.168.4.1`
 3. Renseigner :
    - Vos **informations WiFi**
    - Vos **informations MQTT**
    - Vos **Les modules à utiliser**
+   - **Mode passif Connect** si une box Connect est déjà présente
 4. Sauvegarder → le module redémarre automatiquement
 
 ---
@@ -110,6 +113,11 @@ Avant le flash :
   c. Lancez l'association Frisquet Connect. Appuyez sur OK jusqu’à ce que l’écran demande d’associer la Frisquet Connect.
 2. Sur le portail ou Home Assistant : activer le bouton **“Associer Connect”**
 3. Une fois reconnu, la chaudière commencera à envoyer les données vers le module
+
+#### 🔹 Mode passif Connect (box Connect déjà en place)
+1. Activer **“Mode passif Connect”** dans le portail.
+2. L’ESP32 **n’émet pas** de trames et **n’associe pas**.
+3. Il récupère les informations en **écoutant les réponses chaudière** aux requêtes de la box Connect.
 
 #### 🔹 Sonde extérieure
 1. Sur la chaudière : **lancer l’association Sonde Extérieure**
@@ -170,4 +178,4 @@ Mais bon, si ça marche, vous pouvez toujours m’offrir un café ☕ 😉
 **Année :** 2025  
 **Plateforme :** ESP32 (Heltec WiFi LoRa 32, SX1262)  
 **Compatibilité :** Home Assistant, MQTT, Frisquet Chaudière série Eco Radio Visio  
-**Version :** 2.0.0c
+**Version :** 26.05.06.1120

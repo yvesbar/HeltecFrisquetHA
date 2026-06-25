@@ -22,7 +22,7 @@ void Satellite::begin(bool modeVirtuel) {
     info("[SATELLITE Z%d] Initialisation du satellite [MODE %s].", _zone.getNumeroZone(), _modeVirtuel ? "VIRTUEL" : "PHYSIQUE");
 
     // Device commun
-    MqttDevice* device = mqtt().getDevice("heltecFrisquet");
+    MqttDevice* device = mqtt().getDevice("openFrisquetVisio");
 
     // SWITCH: Activation Écrasement consigne
     _mqttEntities.ecrasementConsigne.id = "ecrasementConsigneZ" + String(getNumeroZone());
@@ -43,20 +43,12 @@ void Satellite::begin(bool modeVirtuel) {
         mqtt().publishState(_mqttEntities.ecrasementConsigne, payload);
     });
 
-    if(this->getId() == ID_ZONE_1) { // Seulement sur Z1 (leader)
-        // Sensor: Retour fonctionnement chaudière
-        _mqttEntities.etatChaudiere.id = "etatChaudiere";
-        _mqttEntities.etatChaudiere.name = "État chaudière";
-        _mqttEntities.etatChaudiere.component = "sensor";
-        _mqttEntities.etatChaudiere.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "etatChaudiere"}), 0, true);
-        _mqttEntities.etatChaudiere.set("icon", "mdi:tune-variant");
-        mqtt().registerEntity(*device, _mqttEntities.etatChaudiere, true);
-    }
 }
 
 void Satellite::loop() {
     
     static bool firstLoop = true;
+    const bool cdcGereeParConnect = getConfig().useConnect();
     if(firstLoop && !_modeVirtuel) {
         firstLoop = false;
         publishMqtt();
@@ -77,6 +69,11 @@ void Satellite::loop() {
 
     if(firstLoop) {
         recupererInfosChaudiere();
+        if (this->getId() == ID_ZONE_1 && !cdcGereeParConnect) {
+            if (recupererTemperatureCDC()) {
+                _lastRecuperationTemperatureCDC = now;
+            }
+        }
         publishMqtt();
         switch (_zone.getNumeroZone()) {
             case 1: if (getConfig().useZone1()) _zone.publishMqtt(); break;
@@ -85,6 +82,18 @@ void Satellite::loop() {
             default: break;
         }
         firstLoop = false;
+    }
+
+    if (this->getId() == ID_ZONE_1 && !cdcGereeParConnect && (now - _lastRecuperationTemperatureCDC >= 300000 || _lastRecuperationTemperatureCDC == 0)) { // 5 minutes
+        info("[SATELLITE Z%d] Récupération de la température CDC...", getNumeroZone());
+        if (recupererTemperatureCDC()) {
+            _lastRecuperationTemperatureCDC = now;
+            _chaudiere.publishMqtt();
+        } else {
+            _lastRecuperationTemperatureCDC = now <= 60000 ? 1 : now - 60000;
+            error("[SATELLITE Z%d] Échec de la récupération de la température CDC.", getNumeroZone());
+        }
+        delay(100);
     }
 
     if ((_zone.getLastChange() > _zone.getLastEnvoi() && (_zone.getLastChange() + 15000) < now ) || now - _lastEnvoiConsigne >= 600000  ) { // dernier changement ou 10 minutes
@@ -108,9 +117,9 @@ void Satellite::loop() {
 }
 
 void Satellite::publishMqtt() {
-    mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("ecrasementConsigneZ" + String(getNumeroZone())), getEcrasement() ? "ON" : "OFF");
+    mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("ecrasementConsigneZ" + String(getNumeroZone())), getEcrasement() ? "ON" : "OFF");
     if(this->getId() == ID_ZONE_1) { // Seulement sur Z1 (leader)
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("etatChaudiere"), _etatChaudiere.getLibelle().c_str());
+        _chaudiere.publishMqtt();
     }
 }
 
@@ -173,6 +182,48 @@ bool Satellite::recupererInfosChaudiere() {
         Date date = donneesZones.date;
         setDate(date);
         
+        return true;
+    } while(retry++ < 1);
+
+    return false;
+}
+
+bool Satellite::recupererTemperatureCDC() {
+    if(! estAssocie() || getNumeroZone() == 0) {
+        return false;
+    }
+
+    struct donneesTemperatureCDC_t {
+        FrisquetRadio::RadioTrameHeader header;
+        uint8_t longueurDonnees;
+        temperature16 temperatureCDC;
+    } donneesTemperatureCDC;
+
+    size_t length = sizeof(donneesTemperatureCDC_t);
+    int16_t err;
+
+    uint8_t retry = 0;
+    do {
+        err = this->radio().sendAsk(
+            this->getId(),
+            ID_CHAUDIERE,
+            this->getIdAssociation(),
+            this->incrementIdMessage(),
+            0x01,
+            0xA05E,
+            0x0001,
+            (byte*)&donneesTemperatureCDC,
+            length
+        );
+
+        if(err != RADIOLIB_ERR_NONE) {
+            delay(30);
+            continue;
+        }
+
+        float temperatureCDC = donneesTemperatureCDC.temperatureCDC.toFloat();
+        _chaudiere.setTemperatureCDC(temperatureCDC);
+        debug("[SATELLITE Z%d] Température CDC : %.1f°C", getNumeroZone(), temperatureCDC);
         return true;
     } while(retry++ < 1);
 
@@ -345,6 +396,8 @@ bool Satellite::envoyerConsigne() {
         payload.mode = MODE::HORS_GEL;
         payload.temperatureConsigne = isnan(_zone.getTemperatureHorsGel()) ? 8.0f : _zone.getTemperatureHorsGel();
     } 
+
+    payload.mode = encodeModeForSend((MODE)payload.mode);
     
     size_t length = 0;
     int16_t err;
@@ -393,6 +446,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
 
     //info("[SATELLITE Z] Interception envoi consigne.", header->type);
     if(!_modeVirtuel) {
+
         if(length == 23 && header->type == FrisquetRadio::MessageType::INIT && header->idExpediteur == this->getId() && header->idMessage != getIdMessage()) { // Réception en écoute
             FrisquetRadio::RadioTrameInit* requete = (FrisquetRadio::RadioTrameInit*) readBuffer.getBytes(sizeof(FrisquetRadio::RadioTrameInit));
             if(requete->adresseMemoireEcriture.toUInt16() == 0xA02F && requete->tailleMemoireEcriture.toUInt16() == 0x0004) { // Envoi consigne
@@ -473,7 +527,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                 _zone.setTemperatureAmbiante(donneesSatellite->temperatureAmbiante.toFloat());
                 
                 if(! getEcrasement()) {
-                    setMode((MODE)donneesSatellite->mode);
+                    setModeFromRaw(donneesSatellite->mode);
                     _zone.setTemperatureConsigne(donneesSatellite->temperatureConsigne.toFloat());
                     saveConfig();
                     _zone.saveConfig();
@@ -483,7 +537,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                 }
 
                 if(getMode() == MODE::INCONNU) {
-                    setMode((MODE)donneesSatellite->mode);
+                    setModeFromRaw(donneesSatellite->mode);
                 }
                 if(isnan(_zone.getTemperatureConsigne())) {
                     _zone.setTemperatureConsigne(donneesSatellite->temperatureConsigne.toFloat());
@@ -580,4 +634,70 @@ void Satellite::setMode(Satellite::MODE mode) {
             _zone.setMode(Zone::MODE_ZONE::HORS_GEL);
             break;
     }
+}
+
+Satellite::MODE Satellite::decodeModeFromRaw(uint8_t rawMode, bool* compatConnect) const {
+    auto decodeDirect = [](uint8_t modeValue) -> MODE {
+        switch (modeValue) {
+            case MODE::REDUIT_PERMANENT:
+            case MODE::CONFORT_PERMANENT:
+            case MODE::REDUIT_DEROGATION:
+            case MODE::CONFORT_DEROGATION:
+            case MODE::REDUIT_AUTO:
+            case MODE::CONFORT_AUTO:
+            case MODE::HORS_GEL:
+                return (MODE)modeValue;
+            default:
+                return MODE::INCONNU;
+        }
+    };
+
+    MODE direct = decodeDirect(rawMode);
+    if (direct != MODE::INCONNU) {
+        if (compatConnect) {
+            *compatConnect = false;
+        }
+        return direct;
+    }
+
+    uint8_t xorMode = rawMode ^ MODE_CONNECT_COMPAT_XOR;
+    MODE decodedXor = decodeDirect(xorMode);
+    if (decodedXor != MODE::INCONNU) {
+        if (compatConnect) {
+            *compatConnect = true;
+        }
+        return decodedXor;
+    }
+
+    if (compatConnect) {
+        *compatConnect = false;
+    }
+    return MODE::INCONNU;
+}
+
+uint8_t Satellite::encodeModeForSend(Satellite::MODE mode) const {
+    uint8_t rawMode = (uint8_t)mode;
+    if (_modeCompatConnect) {
+        rawMode ^= MODE_CONNECT_COMPAT_XOR;
+    }
+    return rawMode;
+}
+
+void Satellite::setModeFromRaw(uint8_t rawMode) {
+    bool compatConnect = false;
+    MODE decodedMode = decodeModeFromRaw(rawMode, &compatConnect);
+    _modeCompatConnect = compatConnect;
+
+    if (decodedMode == MODE::INCONNU) {
+        char hexMode[5];
+        snprintf(hexMode, sizeof(hexMode), "%02X", rawMode);
+        warning(String("[SATELLITE Z") + String(getNumeroZone()) + "] Mode satellite inconnu: 0x" + String(hexMode));
+        return;
+    }
+
+    if (_modeCompatConnect) {
+        debug("[SATELLITE Z%d] Mode avec compatibilité Connect détectée (XOR 0x20).", getNumeroZone());
+    }
+
+    setMode(decodedMode);
 }

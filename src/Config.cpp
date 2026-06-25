@@ -38,7 +38,7 @@ void Config::load() {
   _wifiOpts.wifiSleep     = _preferences.getBool("wifiSleep", false);
 
   // MQTT
-  _mqttOpts.clientId      = _preferences.getString("mqttClientId", "Heltec Frisquet");
+  _mqttOpts.clientId      = _preferences.getString("mqttClientId", "OpenFrisquetVisio");
   _mqttOpts.host          = _preferences.getString("mqttHost", "192.168.1.10");
   _mqttOpts.port          = _preferences.getUShort("mqttPort", 1883);
   _mqttOpts.username      = _preferences.getString("mqttUser", "");
@@ -55,6 +55,7 @@ void Config::load() {
   }
 
   _useConnect = _preferences.getBool("useConnect", false);
+  _useConnectPassive = _preferences.getBool("useConnectPass", false);
   _useSondeExterieure = _preferences.getBool("useSondeExt", false);
   _useDS18B20 = _preferences.getBool("useDS18B20", false);
   _useSatelliteZ1 = _preferences.getBool("useSatelliteZ1", false);
@@ -116,6 +117,7 @@ void Config::save() {
   // Frisquet
   _preferences.putBytes("networkID", &_networkId, sizeof(NetworkID));
   _preferences.putBool("useConnect", _useConnect);
+  _preferences.putBool("useConnectPass", _useConnectPassive);
   _preferences.putBool("useSondeExt", _useSondeExterieure);
   _preferences.putBool("useDS18B20", _useDS18B20);
   _preferences.putBool("useSatelliteZ1", _useSatelliteZ1);

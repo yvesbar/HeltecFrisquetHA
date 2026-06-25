@@ -49,6 +49,7 @@ class Zone {
         void setTemperatureAmbiante(float temperature);
         void setTemperatureConsigne(float temperature);
         void setTemperatureDepart(float temperature);
+        void setTemperatureConsigneDepart(float temperature);
         void setTemperatureBoost(float temperature);
 
         float getTemperatureConfort();
@@ -58,6 +59,7 @@ class Zone {
         float getTemperatureConsigne();
         float getTemperatureAmbiante();
         float getTemperatureDepart();
+        float getTemperatureConsigneDepart();
         float getTemperatureBoost();
 
         bool confortActif();
@@ -101,6 +103,7 @@ class Zone {
             MqttEntity temperatureReduit;
             MqttEntity temperatureHorsGel;
             MqttEntity temperatureDepart;
+            MqttEntity temperatureConsigneDepart;
             MqttEntity temperatureBoost;
             MqttEntity boost;
             MqttEntity thermostat;
@@ -112,6 +115,7 @@ class Zone {
         float _temperatureReduit = NAN;                        // Début 5°C -> max 30°C
         float _temperatureHorsGel = NAN;                       // Début 5°C -> max 30°C
         float _temperatureDepart = NAN;   
+        float _temperatureConsigneDepart = NAN;
         float _temperatureConsigne = NAN; 
         float _temperatureAmbiante = NAN;
         float _temperatureBoost = NAN;

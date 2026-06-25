@@ -1,10 +1,12 @@
 #include "Portal.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <Update.h>
 #include <stdarg.h>
 #include <cstring>
 #include <esp_system.h>
 #include "Frisquet/NetworkID.h" 
+#include "Version.h"
 
 // Déclaration du logger global défini dans Logs.cpp
 extern Logs logs;
@@ -165,6 +167,7 @@ void Portal::begin(bool startApFallbackIfNoWifi) {
   _srv.on("/api/memory/scan", HTTP_GET, [this]{ handleMemoryScan(); });
   _srv.on("/memory", HTTP_GET, [this]{ handleMemoryPage(); });
   _srv.on("/api/radio/send", HTTP_POST, [this]{ handleSendRadio(); });
+  _srv.on("/api/update", HTTP_POST, [this]{ handleUpdate(); }, [this]{ handleUpdateUpload(); });
   _srv.on("/api/connect/pair", HTTP_POST, [this]{ handlePairConnect(); });
   _srv.on("/api/sonde-ext/pair", HTTP_POST, [this]{ handlePairSondeExt(); });
   _srv.on("/api/satellite/z1/pair", HTTP_POST, [this]{ handlePairSatelliteZ1(); });
@@ -188,6 +191,46 @@ void Portal::loop() {
 void Portal::handleClearLogs() {
   logs.clear();
   _srv.send(200, "text/plain; charset=utf-8", "OK");
+}
+
+void Portal::handleUpdate() {
+  if (_lastUpdateError.length() > 0 || Update.hasError()) {
+    String err = _lastUpdateError.length() > 0 ? _lastUpdateError : "Erreur pendant la mise à jour";
+    error("[PORTAIL] OTA HTTP: %s", err.c_str());
+    _srv.send(500, "application/json; charset=utf-8", "{\"ok\":false,\"err\":\"Mise à jour échouée\"}");
+    return;
+  }
+
+  _srv.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
+  info("[PORTAIL] OTA HTTP: OK, redémarrage...");
+  scheduleReboot(1500);
+}
+
+void Portal::handleUpdateUpload() {
+  HTTPUpload& upload = _srv.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    _lastUpdateError = "";
+    info("[PORTAIL] OTA HTTP: début upload (%s, %u bytes)", upload.filename.c_str(), upload.totalSize);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+      _lastUpdateError = "Update.begin a échoué";
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      _lastUpdateError = "Update.write a échoué";
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (!Update.end(true)) {
+      _lastUpdateError = "Update.end a échoué";
+      Update.printError(Serial);
+    } else {
+      info("[PORTAIL] OTA HTTP: upload terminé (%u bytes)", upload.totalSize);
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    _lastUpdateError = "Upload interrompu";
+    Update.abort();
+  }
 }
 
 // -------------------- API --------------------
@@ -227,6 +270,8 @@ void Portal::handleGetConfig() {
 
   json += "\"useConnect\":" +
           String(_frisquetManager.config().useConnect() ? "true" : "false") + ",";
+  json += "\"useConnectPassive\":" +
+          String(_frisquetManager.config().useConnectPassive() ? "true" : "false") + ",";
   json += "\"useSondeExt\":" +
           String(_frisquetManager.config().useSondeExterieure() ? "true" : "false") + ",";
   json += "\"useDS18B20\":" +
@@ -348,6 +393,14 @@ void Portal::handlePostConfig() {
     bool cur = _frisquetManager.config().useConnect();
     bool v = parseBoolArg(_srv.arg("useConnect"), cur);
     _frisquetManager.config().useConnect(v);
+  }
+  if (_srv.hasArg("useConnectPassive")) {
+    bool cur = _frisquetManager.config().useConnectPassive();
+    bool v = parseBoolArg(_srv.arg("useConnectPassive"), cur);
+    if (!_frisquetManager.config().useConnect()) {
+      v = false;
+    }
+    _frisquetManager.config().useConnectPassive(v);
   }
   if (_srv.hasArg("useSondeExt")) {
     bool cur = _frisquetManager.config().useSondeExterieure();
@@ -525,7 +578,9 @@ void Portal::handleLogsPage() {
 
 void Portal::handleStatus() {
   bool sta = WiFi.isConnected();
-  bool ap  = _apRunning;
+  wifi_mode_t mode = WiFi.getMode();
+  bool ap  = (mode == WIFI_AP || mode == WIFI_AP_STA);
+  _apRunning = ap;
 
   IPAddress ip = WiFi.localIP();
   String ssid = sta ? WiFi.SSID() : "";
@@ -907,6 +962,11 @@ void Portal::handlePairConnect() {
               "{\"ok\":false,\"err\":\"Connect désactivé dans la configuration\"}");
     return;
   }
+  if (_frisquetManager.config().useConnectPassive()) {
+    _srv.send(400, "application/json; charset=utf-8",
+              "{\"ok\":false,\"err\":\"Mode passif activé : association Connect désactivée\"}");
+    return;
+  }
 
   info("[PORTAIL] Demande d'association du module Connect");
 
@@ -1136,24 +1196,28 @@ void Portal::scheduleReboot(uint32_t delayMs) {
 }
 
 void Portal::startAp() {
-  _apRunning = true;
   WiFi.mode(WIFI_AP_STA);
   bool ok;
   if (_apPass.length() >= 8) ok = WiFi.softAP(_apSsid.c_str(), _apPass.c_str());
   else                       ok = WiFi.softAP(_apSsid.c_str()); // open
+  _apRunning = ok;
   IPAddress ip = WiFi.softAPIP();
-  info("[PORTAIL] AP fallback %s (%s) %s",
-       _apSsid.c_str(),
-       (_apPass.length() >= 8 ? "WPA2" : "OPEN"),
-       ip.toString().c_str());
+  if (ok) {
+    info("[PORTAIL] AP fallback %s (%s) %s",
+         _apSsid.c_str(),
+         (_apPass.length() >= 8 ? "WPA2" : "OPEN"),
+         ip.toString().c_str());
+  } else {
+    error("[PORTAIL] AP fallback: échec du démarrage");
+  }
 }
 
 String Portal::html() {
-  return R"HTML(
+  String page = R"HTML(
 <!DOCTYPE html><html lang='fr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Frisquet – Configuration</title>
+<title>OpenFrisquetVisio – Configuration</title>
 <style>
   :root{
     --bg:#0f1115;--card:#171a21;--muted:#8a8f98;--txt:#e7e9ee;
@@ -1212,7 +1276,7 @@ String Portal::html() {
 
   <div class='split'>
     <div class='card'>
-      <h2>Frisquet – Configuration</h2>
+      <h2>OpenFrisquetVisio – Configuration</h2>
       <p class='hint'>
         Renseignez le Wi-Fi, le broker MQTT et les options Frisquet puis cliquez sur
         <strong>Enregistrer</strong>.
@@ -1283,7 +1347,7 @@ String Portal::html() {
           <div class='grid-3'>
             <div class='row'>
               <label>Client ID</label>
-              <input id='mqttClientId' type='text' placeholder='Heltec-Frisquet'>
+              <input id='mqttClientId' type='text' placeholder='OpenFrisquetVisio'>
             </div>
             <div class='row'>
               <label>Base topic</label>
@@ -1330,11 +1394,13 @@ String Portal::html() {
 
           <div class='grid-2'>
             <div class='row'>
-              <label class='check-row'>
-                <input id='useConnect' type='checkbox'>
-                <span>Activer Connect</span>
-                <div class='hint'>Active la passerelle Connect Frisquet.</div>
-              </label>
+              <label>Mode Connect</label>
+              <select id='useConnectMode'>
+                <option value='0'>Ne pas utiliser le système Connect</option>
+                <option value='1'>Utiliser le Frisquet Connect virtuel</option>
+                <option value='2'>Utiliser le Frisquet Connect physique (écoute uniquement)</option>
+              </select>
+              <div class='hint'>Le mode virtuel permet l'association et l'envoi de commandes, le mode physique est passif.</div>
             </div>
 
             <div class="row">
@@ -1346,18 +1412,14 @@ String Portal::html() {
 
           <div class='grid-3' style="margin-top:10px">
             <div class='row'>
-              <label class='check-row'>
-                <input id='useSondeExt' type='checkbox'>
-                <span>Activer sonde extérieure</span>
-              </label>
-              <div class='hint'>Utilise la sonde extérieure radio Frisquet.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useDS18B20' type='checkbox'>
-                <span>Utiliser DS18B20</span>
-              </label>
-              <div class='hint'>Active l'utilisation d'un capteur de température filaire.</div>
+              <label>Mode Sonde extérieure</label>
+              <select id='useSondeMode'>
+                <option value='0'>Ne pas utiliser la sonde extérieure</option>
+                <option value='1'>Sonde extérieure Frisquet</option>
+                <option value='2'>Sonde extérieure virtuelle</option>
+                <option value='3'>Sonde extérieure avec DS18B20</option>
+              </select>
+              <div class='hint'>Les modes 0 et 1 n'activent pas la sonde extérieure.</div>
             </div>
             <div class='row'>
               <button type='button' class='btn btn-sm' id='btnPairSondeExt' style='margin-top:6px;display:none'>
@@ -1365,99 +1427,41 @@ String Portal::html() {
               </button>
             </div>
           </div>
-          <div class='grid-3' style='margin-top:8px'>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone1' type='checkbox'>
-                <span>Zone 1 présente</span>
-              </label>
-              <div class='hint'>Zone 1 physique présente.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone2' type='checkbox'>
-                <span>Zone 2 présente</span>
-              </label>
-              <div class='hint'>Zone 2 physique présente.</div>
-            </div>
-            <div class='row'>
-              <label class='check-row'>
-                <input id='useZone3' type='checkbox'>
-                <span>Zone 3 présente</span>
-              </label>
-              <div class='hint'>Zone 3 physique présente.</div>
-            </div>
-          </div>
-
           <hr />
-
-          <h4>Chaudières non-compatible Connect :</h4>
+          <h4>Gestion des zones</h4>
 
           <div class='grid-3' style="margin-top:10px">
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ1' type='checkbox'>
-                <span>Satellite Z1</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z1.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ1'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z1.
-                </div>
-              </div>
-
+              <label>Mode Zone 1</label>
+              <select id='useZoneMode1'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ1' style='margin-top:6px;display:none'>
                 Associer le Satellite Z1
               </button>
             </div>
 
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ2' type='checkbox'>
-                <span>Satellite Z2</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z2.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ2'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z2.
-                </div>
-              </div>
-
+              <label>Mode Zone 2</label>
+              <select id='useZoneMode2'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ2' style='margin-top:6px;display:none'>
                 Associer le Satellite Z2
               </button>
             </div>
 
             <div class='row'>
-              <label class='check-row' style='margin-top:8px'>
-                <input id='useSatelliteZ3' type='checkbox'>
-                <span>Satellite Z3</span>
-              </label>
-              <div class='hint'>Activer la gestion et la récupération d'information du satellite Z3.</div>
-
-              <div class='row' style='margin-top:6px'>
-                <label>Type de satellite</label>
-                <select id='useSatelliteVirtualZ3'>
-                  <option value='false'>Physique</option>
-                  <option value='true'>Virtuel (émulation)</option>
-                </select>
-                <div class='hint'>
-                  Choisir le type de satellite à utiliser pour Z3.
-                </div>
-              </div>
-
+              <label>Mode Zone 3</label>
+              <select id='useZoneMode3'>
+                <option value='0'>Pas de gestion de la zone</option>
+                <option value='1'>Gérer la zone avec satellite physique</option>
+                <option value='2'>Gérer la zone avec satellite virtuel</option>
+              </select>
               <button type='button' class='btn btn-sm' id='btnPairSatZ3' style='margin-top:6px;display:none'>
                 Associer le Satellite Z3
               </button>
@@ -1497,14 +1501,6 @@ String Portal::html() {
           <span>Reset&nbsp;:</span>
           <span id='badgeReset' class='warn'>inconnu</span>
         </span>
-        <span class='badge'>
-          <span>Heap&nbsp;:</span>
-          <span id='badgeHeap' class='warn'>inconnu</span>
-        </span>
-        <span class='badge'>
-          <span>Min heap&nbsp;:</span>
-          <span id='badgeMinHeap' class='warn'>inconnu</span>
-        </span>
       </div>
       <div class='row' style='margin-top:8px'>
         <div class='hint'>
@@ -1513,65 +1509,80 @@ String Portal::html() {
       </div>
     </div>
 
+    <div class='card'>
+      <h2>Mise à jour firmware</h2>
+      <p class='hint'>
+        Sélectionnez un fichier <code>.bin</code> compilé pour ce Heltec V3, puis lancez l’upload.
+        L’appareil redémarrera automatiquement.
+      </p>
+      <form id='fwForm'>
+        <div class='row'>
+          <label>Fichier firmware</label>
+          <input id='fwFile' type='file' accept='.bin'>
+        </div>
+        <div class='actions' style='margin-top:10px'>
+          <button class='btn' type='submit' id='fwBtn'>Uploader</button>
+        </div>
+        <div id='fwMsg' class='msg'></div>
+      </form>
+    </div>
+
   </div>
 
   <div class='footer'>
-    Portail de configuration – Frisquet Heltec
+    Portail de configuration – OpenFrisquetVisio · version {{OPENFRISQUETVISIO_VERSION}}
   </div>
 </div>
 
 <script>
 const $ = sel => document.querySelector(sel);
 const msg = (t) => { const m=$("#msg"); if(!m) return; m.textContent=t; m.classList.add("show"); };
+const fwMsg = (t) => { const m=$("#fwMsg"); if(!m) return; m.textContent=t; m.classList.add("show"); };
+let savedCfg = {
+  useConnect: false,
+  useConnectPassive: false,
+  useSondeExt: false,
+  useDS18B20: false,
+  useZone1: false,
+  useZone2: false,
+  useZone3: false,
+  useSatelliteZ1: false,
+  useSatelliteZ2: false,
+  useSatelliteZ3: false,
+  useSatelliteVirtualZ1: false,
+  useSatelliteVirtualZ2: false,
+  useSatelliteVirtualZ3: false
+};
 
 const FIELDS = [
   "wifiHostname","wifiSsid","wifiPass","wifiStatic","wifiIp","wifiGw","wifiMask","wifiDns1","wifiDns2",
   "mqttHost","mqttPort","mqttUser","mqttPass",
   "mqttClientId","mqttBaseTopic",
-  "networkID","useConnect","useSondeExt","useDS18B20",
-  "useZone1","useZone2","useZone3",
-  "useSatelliteZ1","useSatelliteZ2","useSatelliteZ3",
-  "useSatelliteVirtualZ1","useSatelliteVirtualZ2","useSatelliteVirtualZ3"
+  "networkID"
 ];
 
 function updatePairButtons() {
-  const chkConnect = $("#useConnect");
-  const chkSonde   = $("#useSondeExt");
+  const selConnectMode = $("#useConnectMode");
+  const selSondeMode = $("#useSondeMode");
   const btnConnect = $("#btnPairConnect");
   const btnSonde   = $("#btnPairSondeExt");
 
-  if (chkConnect && btnConnect) {
-    btnConnect.style.display = chkConnect.checked ? "inline-flex" : "none";
+  if (selConnectMode && btnConnect) {
+    const canPairConnect = savedCfg.useConnect && !savedCfg.useConnectPassive;
+    btnConnect.style.display = canPairConnect ? "inline-flex" : "none";
   }
-  if (chkSonde && btnSonde) {
-    btnSonde.style.display = chkSonde.checked ? "inline-flex" : "none";
+  if (selSondeMode && btnSonde) {
+    btnSonde.style.display = savedCfg.useSondeExt ? "inline-flex" : "none";
   }
 
 
-  const chkZ1 = $("#useSatelliteZ1");
-  const chkZ2 = $("#useSatelliteZ2");
-  const chkZ3 = $("#useSatelliteZ3");
   const btnZ1 = $("#btnPairSatZ1");
   const btnZ2 = $("#btnPairSatZ2");
   const btnZ3 = $("#btnPairSatZ3");
 
-  if (chkZ1 && btnZ1) {
-    btnZ1.style.display = chkZ1.checked ? "inline-flex" : "none";
-  }
-  if (chkZ2 && btnZ2) {
-    btnZ2.style.display = chkZ2.checked ? "inline-flex" : "none";
-  }
-  if (chkZ3 && btnZ3) {
-    btnZ3.style.display = chkZ3.checked ? "inline-flex" : "none";
-  }
-
-  // Pair buttons visibility should also consider whether the corresponding zone is present
-  const chkZone1 = $("#useZone1");
-  const chkZone2 = $("#useZone2");
-  const chkZone3 = $("#useZone3");
-  if (btnZ1 && chkZone1) btnZ1.style.display = (chkZ1.checked && chkZone1.checked) ? "inline-flex" : "none";
-  if (btnZ2 && chkZone2) btnZ2.style.display = (chkZ2.checked && chkZone2.checked) ? "inline-flex" : "none";
-  if (btnZ3 && chkZone3) btnZ3.style.display = (chkZ3.checked && chkZone3.checked) ? "inline-flex" : "none";
+  if (btnZ1) btnZ1.style.display = savedCfg.useSatelliteZ1 && savedCfg.useSatelliteVirtualZ1 ? "inline-flex" : "none";
+  if (btnZ2) btnZ2.style.display = savedCfg.useSatelliteZ2 && savedCfg.useSatelliteVirtualZ2 ? "inline-flex" : "none";
+  if (btnZ3) btnZ3.style.display = savedCfg.useSatelliteZ3 && savedCfg.useSatelliteVirtualZ3 ? "inline-flex" : "none";
 }
 
 
@@ -1589,6 +1600,47 @@ async function loadConfig() {
   try {
     const r = await fetch("/api/config",{cache:"no-store"});
     const j = await r.json();
+    savedCfg.useConnect = !!j.useConnect;
+    savedCfg.useConnectPassive = !!j.useConnectPassive;
+    savedCfg.useSondeExt = !!j.useSondeExt;
+    savedCfg.useDS18B20 = !!j.useDS18B20;
+    savedCfg.useZone1 = !!j.useZone1;
+    savedCfg.useZone2 = !!j.useZone2;
+    savedCfg.useZone3 = !!j.useZone3;
+    savedCfg.useSatelliteZ1 = !!j.useSatelliteZ1;
+    savedCfg.useSatelliteZ2 = !!j.useSatelliteZ2;
+    savedCfg.useSatelliteZ3 = !!j.useSatelliteZ3;
+    savedCfg.useSatelliteVirtualZ1 = !!j.useSatelliteVirtualZ1;
+    savedCfg.useSatelliteVirtualZ2 = !!j.useSatelliteVirtualZ2;
+    savedCfg.useSatelliteVirtualZ3 = !!j.useSatelliteVirtualZ3;
+    const selConnectMode = $("#useConnectMode");
+    if (selConnectMode) {
+      if (!j.useConnect) {
+        selConnectMode.value = "0";
+      } else {
+        selConnectMode.value = j.useConnectPassive ? "2" : "1";
+      }
+    }
+    const selSondeMode = $("#useSondeMode");
+    if (selSondeMode) {
+      if (!j.useSondeExt) {
+        selSondeMode.value = "0";
+      } else {
+        selSondeMode.value = j.useDS18B20 ? "3" : "2";
+      }
+    }
+    const selZoneMode1 = $("#useZoneMode1");
+    const selZoneMode2 = $("#useZoneMode2");
+    const selZoneMode3 = $("#useZoneMode3");
+    if (selZoneMode1) {
+      selZoneMode1.value = !j.useSatelliteZ1 ? "0" : (j.useSatelliteVirtualZ1 ? "2" : "1");
+    }
+    if (selZoneMode2) {
+      selZoneMode2.value = !j.useSatelliteZ2 ? "0" : (j.useSatelliteVirtualZ2 ? "2" : "1");
+    }
+    if (selZoneMode3) {
+      selZoneMode3.value = !j.useSatelliteZ3 ? "0" : (j.useSatelliteVirtualZ3 ? "2" : "1");
+    }
     FIELDS.forEach(id => {
       const el = $("#"+id);
       if (!el || j[id] === undefined) return;
@@ -1611,6 +1663,41 @@ async function loadConfig() {
 async function saveConfig(e) {
   e.preventDefault();
   const fd = new FormData();
+
+  const selConnectMode = document.querySelector('#useConnectMode');
+  if (selConnectMode) {
+    const mode = selConnectMode.value;
+    fd.append("useConnect", mode === "1" || mode === "2" ? "true" : "false");
+    fd.append("useConnectPassive", mode === "2" ? "true" : "false");
+  }
+  const selSondeMode = document.querySelector('#useSondeMode');
+  if (selSondeMode) {
+    const mode = selSondeMode.value;
+    fd.append("useSondeExt", mode === "2" || mode === "3" ? "true" : "false");
+    fd.append("useDS18B20", mode === "3" ? "true" : "false");
+  }
+  const selZoneMode1 = document.querySelector('#useZoneMode1');
+  if (selZoneMode1) {
+    const mode = selZoneMode1.value;
+    fd.append("useZone1", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ1", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ1", mode === "2" ? "true" : "false");
+  }
+  const selZoneMode2 = document.querySelector('#useZoneMode2');
+  if (selZoneMode2) {
+    const mode = selZoneMode2.value;
+    fd.append("useZone2", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ2", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ2", mode === "2" ? "true" : "false");
+  }
+  const selZoneMode3 = document.querySelector('#useZoneMode3');
+  if (selZoneMode3) {
+    const mode = selZoneMode3.value;
+    fd.append("useZone3", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteZ3", mode !== "0" ? "true" : "false");
+    fd.append("useSatelliteVirtualZ3", mode === "2" ? "true" : "false");
+  }
+
   FIELDS.forEach(id => {
     const el = document.querySelector('#'+id);
     if (!el) return;
@@ -1699,23 +1786,11 @@ async function loadStatus() {
     setBadge("badgeSta", j.staConnected, staText);
     setBadge("badgeUptime", true, formatUptime(j.uptimeSec));
     setBadge("badgeReset", true, j.resetReason || "inconnu");
-    if (typeof j.freeHeap === "number") {
-      setBadge("badgeHeap", true, j.freeHeap + " o");
-    } else {
-      setBadge("badgeHeap", false, "indisponible");
-    }
-    if (typeof j.minFreeHeap === "number") {
-      setBadge("badgeMinHeap", true, j.minFreeHeap + " o");
-    } else {
-      setBadge("badgeMinHeap", false, "indisponible");
-    }
   } catch (e) {
     setBadge("badgeAp", false, "indisponible");
     setBadge("badgeSta", false, "indisponible");
     setBadge("badgeUptime", false, "indisponible");
     setBadge("badgeReset", false, "indisponible");
-    setBadge("badgeHeap", false, "indisponible");
-    setBadge("badgeMinHeap", false, "indisponible");
   }
 }
 
@@ -1793,8 +1868,45 @@ document.addEventListener("DOMContentLoaded", ()=>{
     });
   });
 
-  const form = $("#form");
+const form = $("#form");
   if (form) form.addEventListener("submit", saveConfig);
+
+const fwForm = $("#fwForm");
+if (fwForm) {
+  fwForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fileInput = $("#fwFile");
+    const btn = $("#fwBtn");
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      fwMsg("Sélectionnez un fichier .bin.");
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const fd = new FormData();
+    fd.append("update", file, file.name);
+
+    if (btn) btn.disabled = true;
+    fwMsg("Upload en cours...");
+    try {
+      const res = await fetch("/api/update", { method: "POST", body: fd });
+      let ok = res.ok;
+      let text = "Mise à jour terminée. Redémarrage…";
+      try {
+        const json = await res.json();
+        ok = !!json.ok;
+        if (!ok && json.err) text = json.err;
+      } catch (_) {
+        if (!ok) text = "Mise à jour échouée.";
+      }
+      fwMsg(text);
+    } catch (err) {
+      fwMsg("Erreur réseau pendant l’upload.");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+}
 
   const btnReboot = $("#btnReboot");
   if (btnReboot) {
@@ -1805,23 +1917,17 @@ document.addEventListener("DOMContentLoaded", ()=>{
     });
   }
 
-  const chkConnect = $("#useConnect");
-  const chkSonde   = $("#useSondeExt");
-  const chkZ1      = $("#useSatelliteZ1");
-  const chkZ2      = $("#useSatelliteZ2");
-  const chkZ3      = $("#useSatelliteZ3");
-  const chkZone1   = $("#useZone1");
-  const chkZone2   = $("#useZone2");
-  const chkZone3   = $("#useZone3");
+  const selConnectMode = $("#useConnectMode");
+  const selSondeMode = $("#useSondeMode");
+  const selZoneMode1 = $("#useZoneMode1");
+  const selZoneMode2 = $("#useZoneMode2");
+  const selZoneMode3 = $("#useZoneMode3");
 
-  if (chkConnect) chkConnect.addEventListener("change", updatePairButtons);
-  if (chkSonde)   chkSonde.addEventListener("change", updatePairButtons);
-  if (chkZ1)      chkZ1.addEventListener("change", updatePairButtons);
-  if (chkZ2)      chkZ2.addEventListener("change", updatePairButtons);
-  if (chkZ3)      chkZ3.addEventListener("change", updatePairButtons);
-  if (chkZone1)   chkZone1.addEventListener("change", updatePairButtons);
-  if (chkZone2)   chkZone2.addEventListener("change", updatePairButtons);
-  if (chkZone3)   chkZone3.addEventListener("change", updatePairButtons);
+  if (selConnectMode) selConnectMode.addEventListener("change", updatePairButtons);
+  if (selSondeMode) selSondeMode.addEventListener("change", updatePairButtons);
+  if (selZoneMode1) selZoneMode1.addEventListener("change", updatePairButtons);
+  if (selZoneMode2) selZoneMode2.addEventListener("change", updatePairButtons);
+  if (selZoneMode3) selZoneMode3.addEventListener("change", updatePairButtons);
   const btnPairConnect = $("#btnPairConnect");
   const btnPairSonde   = $("#btnPairSondeExt");
   const btnPairSatZ1   = $("#btnPairSatZ1");
@@ -1854,6 +1960,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
 </body></html>
 )HTML";
+  page.replace("{{OPENFRISQUETVISIO_VERSION}}", OPENFRISQUETVISIO_VERSION);
+  return page;
 }
 
 
@@ -1863,7 +1971,7 @@ String Portal::logsHtml() {
 <!DOCTYPE html><html lang='fr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Frisquet – Logs</title>
+<title>OpenFrisquetVisio – Logs</title>
 <style>
   :root{
     --bg:#0f1115;--card:#171a21;--muted:#8a8f98;--txt:#e7e9ee;
@@ -1933,7 +2041,7 @@ String Portal::logsHtml() {
 
   <div class='topnav'>
     <a href='/' class='btn'>&larr;&nbsp;Retour</a>
-    <span class='badge'>Frisquet – Logs</span>
+    <span class='badge'>OpenFrisquetVisio – Logs</span>
   </div>
 
   <div class='card'>
@@ -1992,6 +2100,8 @@ String Portal::logsHtml() {
 const $ = s => document.querySelector(s);
 let raw = "";
 let timer = null;
+let pollInFlight = false;
+let pollStopped = false;
 
 const elLog     = $("#log");
 const selRef    = $("#refresh");
@@ -2033,6 +2143,8 @@ function render(){
 }
 
 async function reload(){
+  if(pollInFlight || pollStopped) return;
+  pollInFlight = true;
   try{
     // On envoie la limite et éventuellement le niveau au backend
     const limitParam = selLimit.value === "0" ? "500" : selLimit.value;
@@ -2048,14 +2160,38 @@ async function reload(){
     render();
   }catch(e){
     elLog.textContent = "Erreur chargement logs: " + e;
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+function stopPolling(){
+  pollStopped = true;
+  if(timer){ clearTimeout(timer); timer = null; }
+}
+
+function startPolling(){
+  pollStopped = false;
+  scheduleNextPoll();
+}
+
+function scheduleNextPoll(){
+  if(pollStopped) return;
+  const v = parseInt(selRef.value||"0",10);
+  if(v>0){
+    if(timer){ clearTimeout(timer); timer = null; }
+    timer = setTimeout(async ()=>{
+      await reload();
+      scheduleNextPoll();
+    }, v);
   }
 }
 
 function updateRefreshTimer(){
-  if(timer){ clearInterval(timer); timer = null; }
+  stopPolling();
   const v = parseInt(selRef.value||"0",10);
   if(v>0){
-    timer = setInterval(reload, v);
+    startPolling();
   }
 }
 
@@ -2077,8 +2213,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   selRef.addEventListener("change", updateRefreshTimer);
 
-  reload();
-  updateRefreshTimer();
+  reload().then(updateRefreshTimer);
 });
 </script>
 
@@ -2092,7 +2227,7 @@ String Portal::memoryHtml() {
 <!DOCTYPE html><html lang='fr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Frisquet – Mémoire chaudière</title>
+<title>OpenFrisquetVisio – Mémoire chaudière</title>
 <style>
   :root{
     --bg:#0f1115;--card:#171a21;--muted:#8a8f98;--txt:#e7e9ee;
@@ -2158,7 +2293,7 @@ String Portal::memoryHtml() {
 
   <div class='topnav'>
     <a href='/' class='btn'>&larr;&nbsp;Retour</a>
-    <span class='badge'>Frisquet – Mémoire chaudière</span>
+    <span class='badge'>OpenFrisquetVisio – Mémoire chaudière</span>
   </div>
 
   <div class='card'>
@@ -2225,6 +2360,8 @@ const btnRead = $("#btnRead");
 const btnScan = $("#btnScan");
 const btnStop = $("#btnStop");
 let timer = null;
+let pollInFlight = false;
+let pollStopped = false;
 
 function toHex(n, w){
   return n.toString(16).toUpperCase().padStart(w, "0");
@@ -2252,6 +2389,8 @@ function renderDump(startHex, words){
 }
 
 async function readOnce(){
+  if(pollInFlight || pollStopped) return;
+  pollInFlight = true;
   const start = (inpStart.value || "0000").trim();
   const len = parseInt(inpLen.value || "16", 10);
   const qs = "?start=" + encodeURIComponent(start) +
@@ -2276,6 +2415,8 @@ async function readOnce(){
     }
   }catch(e){
     showMsg("Erreur réseau: " + e, false);
+  } finally {
+    pollInFlight = false;
   }
 }
 
@@ -2313,11 +2454,33 @@ async function scanOnce(){
   }
 }
 
-function updateTimer(){
-  if(timer){ clearInterval(timer); timer = null; }
+function stopPolling(){
+  pollStopped = true;
+  if(timer){ clearTimeout(timer); timer = null; }
+}
+
+function startPolling(){
+  pollStopped = false;
+  scheduleNextPoll();
+}
+
+function scheduleNextPoll(){
+  if(pollStopped) return;
   const v = parseInt(selRef.value || "0", 10);
   if(v > 0){
-    timer = setInterval(readOnce, v);
+    if(timer){ clearTimeout(timer); timer = null; }
+    timer = setTimeout(async ()=>{
+      await readOnce();
+      scheduleNextPoll();
+    }, v);
+  }
+}
+
+function updateTimer(){
+  stopPolling();
+  const v = parseInt(selRef.value || "0", 10);
+  if(v > 0){
+    startPolling();
   }
 }
 
@@ -2340,7 +2503,7 @@ String Portal::logsRadioHtml() {
 <!DOCTYPE html><html lang='fr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Frisquet – Trames radio</title>
+<title>OpenFrisquetVisio – Trames radio</title>
 <style>
   :root{
     --bg:#0f1115;--card:#171a21;--muted:#8a8f98;--txt:#e7e9ee;
@@ -2411,7 +2574,7 @@ String Portal::logsRadioHtml() {
 
   <div class='topnav'>
     <a href='/' class='btn'>&larr;&nbsp;Retour</a>
-    <span class='badge'>Frisquet – Trames radio</span>
+    <span class='badge'>OpenFrisquetVisio – Trames radio</span>
     <a href='/logs' class='btn'>Tous les logs</a>
   </div>
 
@@ -2491,6 +2654,9 @@ const inpPayload = $("#payload");
 const btnSend    = $("#btnSend");
 const msgBox     = $("#msg");
 
+let pollInFlight = false;
+let pollStopped = false;
+
 function showMsg(text, ok){
   if(!msgBox) return;
   msgBox.textContent = text;
@@ -2523,6 +2689,8 @@ function render(){
 }
 
 async function reload(){
+  if(pollInFlight || pollStopped) return;
+  pollInFlight = true;
   try{
     const limitParam = selLimit.value === "0" ? "500" : selLimit.value;
     const qs =
@@ -2535,14 +2703,38 @@ async function reload(){
     render();
   }catch(e){
     elLog.textContent = "Erreur chargement logs: " + e;
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+function stopPolling(){
+  pollStopped = true;
+  if(timer){ clearTimeout(timer); timer = null; }
+}
+
+function startPolling(){
+  pollStopped = false;
+  scheduleNextPoll();
+}
+
+function scheduleNextPoll(){
+  if(pollStopped) return;
+  const v = parseInt(selRef.value||"0",10);
+  if(v>0){
+    if(timer){ clearTimeout(timer); timer = null; }
+    timer = setTimeout(async ()=>{
+      await reload();
+      scheduleNextPoll();
+    }, v);
   }
 }
 
 function updateRefreshTimer(){
-  if(timer){ clearInterval(timer); timer = null; }
+  stopPolling();
   const v = parseInt(selRef.value||"0",10);
   if(v>0){
-    timer = setInterval(reload, v);
+    startPolling();
   }
 }
 
@@ -2610,8 +2802,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     btnSend.addEventListener("click", sendPayload);
   }
 
-  reload();
-  updateRefreshTimer();
+  reload().then(updateRefreshTimer);
 });
 </script>
 

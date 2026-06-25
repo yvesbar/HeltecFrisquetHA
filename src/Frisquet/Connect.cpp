@@ -1,5 +1,6 @@
 #include "Connect.h"
 #include "../Buffer.h"
+#include <cstring>
 #include <math.h>
 
 void Connect::loadConfig() {
@@ -126,10 +127,10 @@ bool Connect::recupererInformations() {
         temperature16 temperatureDepartZ1;
         temperature16 temperatureDepartZ2;
         temperature16 temperatureDepartZ3;
-        temperature16 temperatureInconnue1;
-        temperature16 temperatureInconnue2;
-        temperature16 temperatureInconnue3;
-        temperature16 temperatureInconnue4;
+        temperature16 temperatureSondeSecuriteCDC;
+        temperature16 temperatureFumees;
+        temperature16 puissanceInstantaneeECS;
+        temperature16 puissanceInstantaneeChauffage;
         temperature16 temperatureInconnue5;
         pression16 pression;
         byte i1[1] = {0};
@@ -139,7 +140,9 @@ bool Connect::recupererInformations() {
         temperature16 temperatureAmbianteZ1;
         temperature16 temperatureAmbianteZ2;
         temperature16 temperatureAmbianteZ3;
-        byte i3[6] = {0};
+        temperature16 temperatureConsigneDepartZ1;
+        temperature16 temperatureConsigneDepartZ2;
+        temperature16 temperatureConsigneDepartZ3;
         temperature16 temperatureConsigneZ1;
         temperature16 temperatureConsigneZ2;
         temperature16 temperatureConsigneZ3;
@@ -174,22 +177,31 @@ bool Connect::recupererInformations() {
             getZone1().setTemperatureConsigne(buff.temperatureConsigneZ1.toFloat());
         }
         getZone1().setTemperatureDepart(buff.temperatureDepartZ1.toFloat());
+        getZone1().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ1.toFloat());
 
         if(getZone2().getSource() == Zone::SOURCE::CONNECT) {
             getZone2().setTemperatureAmbiante(buff.temperatureAmbianteZ2.toFloat());
             getZone2().setTemperatureConsigne(buff.temperatureConsigneZ2.toFloat());
         }
         getZone2().setTemperatureDepart(buff.temperatureDepartZ2.toFloat());
+        getZone2().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ2.toFloat());
 
         if(getZone3().getSource() == Zone::SOURCE::CONNECT) {
             getZone3().setTemperatureAmbiante(buff.temperatureAmbianteZ3.toFloat());
             getZone3().setTemperatureConsigne(buff.temperatureConsigneZ3.toFloat());
         }
         getZone3().setTemperatureDepart(buff.temperatureDepartZ3.toFloat());
+        getZone3().setTemperatureConsigneDepart(buff.temperatureConsigneDepartZ3.toFloat());
 
-        setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+
+        if(buff.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(buff.temperatureExterieure.toFloat());
+        }
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
+        _chaudiere.setTemperatureFumees(buff.temperatureFumees.toFloat()/2);
+        _chaudiere.setPuissanceInstantaneeECS(buff.puissanceInstantaneeECS.toFloat());
+        _chaudiere.setPuissanceInstantaneeChauffage(buff.puissanceInstantaneeChauffage.toFloat());
 
         setPression(buff.pression.toFloat());
         return true;
@@ -246,36 +258,36 @@ bool Connect::recupererConsommation() {
 }
 
 void Connect::setTemperatureExterieure(float temperature) {
-    _temperatureExterieure = temperature;
+    _chaudiere.setTemperatureExterieure(temperature);
 }
 void Connect::setTemperatureECS(float temperature) {
-    _temperatureECS = temperature;
+    _chaudiere.setTemperatureECS(temperature);
 }
 void Connect::setTemperatureCDC(float temperature) {
-    _temperatureCDC = temperature;
+    _chaudiere.setTemperatureCDC(temperature);
 }
 
 float Connect::getTemperatureExterieure() {
-    return _temperatureExterieure;
+    return _chaudiere.getTemperatureExterieure();
 }
 float Connect::getTemperatureECS() {
-    return _temperatureECS;
+    return _chaudiere.getTemperatureECS();
 }
 float Connect::getTemperatureCDC() {
-    return _temperatureCDC;
+    return _chaudiere.getTemperatureCDC();
 }
 
 void Connect::setConsommationECS(int16_t consommation) {
-    _consommationGazECS = consommation;
+    _chaudiere.setConsommationECS(consommation);
 }
 void Connect::setConsommationChauffage(int16_t consommation) {
-    _consommationGazChauffage = consommation;
+    _chaudiere.setConsommationChauffage(consommation);
 }
 int16_t Connect::getConsommationChauffage() {
-    return _consommationGazChauffage;
+    return _chaudiere.getConsommationChauffage();
 }
 int16_t Connect::getConsommationECS() {
-    return _consommationGazECS;
+    return _chaudiere.getConsommationECS();
 }
 
 bool Connect::recupererModeECS() {
@@ -323,10 +335,7 @@ bool Connect::recupererModeECS() {
             continue;
         }
         
-        uint8_t raw = buff.modeECS;
-        uint8_t masked = raw & 0x7F;
-        info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X", raw, masked);
-        setModeECS((MODE_ECS)masked);
+        setModeECSFromRaw(buff.modeECS);
 
         return true;
     } while(retry++ < 1);
@@ -335,54 +344,42 @@ bool Connect::recupererModeECS() {
 }
 
 Connect::MODE_ECS Connect::getModeECS() {
-    return _modeECS;
+    return _chaudiere.getModeECS();
 }
 String Connect::getNomModeECS() {
-    switch(getModeECS()) {
-        case MODE_ECS::STOP:
-            return "Stop";
-            break;
-        case MODE_ECS::MAX:
-            return "Max";
-            break;
-        case MODE_ECS::ECO:
-            return "Eco";
-            break;
-        case MODE_ECS::ECO_HORAIRES:
-            return "Eco Horaires";
-            break;
-        case MODE_ECS::ECOPLUS:
-            return "Eco+";
-            break;
-        case MODE_ECS::ECOPLUS_HORAIRES:
-            return "Eco+ Horaires";
-            break;
-    }
-
-    return "Inconnu";
+    return _chaudiere.getNomModeECS();
 }
 bool Connect::setModeECS(MODE_ECS modeECS) {
-    _modeECS = modeECS;
-    return true;
+    return _chaudiere.setModeECS(modeECS);
 }
 bool Connect::setModeECS(const String& modeECS) {
-    if (modeECS.equalsIgnoreCase("Max")) {
-        this->setModeECS(MODE_ECS::MAX);
-    } else if (modeECS.equalsIgnoreCase("Eco")) {
-        this->setModeECS(MODE_ECS::ECO);
-    } else if (modeECS.equalsIgnoreCase("Eco+")) {
-        this->setModeECS(MODE_ECS::ECOPLUS);
-    } else if (modeECS.equalsIgnoreCase("Eco Horaires")) {
-        this->setModeECS(MODE_ECS::ECO_HORAIRES);
-    } else if (modeECS.equalsIgnoreCase("Eco+ Horaires")) {
-        this->setModeECS(MODE_ECS::ECOPLUS_HORAIRES);
-    } else if (modeECS.equalsIgnoreCase("Stop")) {
-        this->setModeECS(MODE_ECS::STOP);
-    } else {
-        return false;
-    }
+    return _chaudiere.setModeECS(modeECS);
+}
 
-    return true;
+void Connect::setModeECSFromRaw(uint8_t rawModeECS) {
+    _modeECSFrameBits = rawModeECS & 0x81;
+    uint8_t masked = rawModeECS & 0x7E;
+    info("[CONNECT] modeECS reçu brut=0x%02X, masqué=0x%02X, bits trame=0x%02X", rawModeECS, masked, _modeECSFrameBits);
+    setModeECS((MODE_ECS)masked);
+}
+
+uint8_t Connect::encodeModeECSForSend() {
+    return ((uint8_t)getModeECS() & 0x7E) | _modeECSFrameBits;
+}
+
+void Connect::handleModeEcsCommand(const String& payload) {
+    info("[CONNECT] Changement du mode  ECS : %s.", payload.c_str());
+    if (getConfig().useConnectPassive()) {
+        info("[CONNECT] Mode passif actif, envoi du mode ECS ignoré.");
+        return;
+    }
+    if (!setModeECS(payload)) {
+        error("[CONNECT] Mode ECS invalide : %s", payload.c_str());
+        return;
+    }
+    if (envoyerModeECS()) {
+        _chaudiere.publishModeEcs();
+    }
 }
 
 bool Connect::envoyerModeECS() {
@@ -397,7 +394,8 @@ bool Connect::envoyerModeECS() {
         uint8_t modeECS = 0x00; 
     } payload;
     
-    payload.modeECS = getModeECS();
+    payload.modeECS = encodeModeECSForSend();
+    info("[CONNECT] modeECS envoyé=0x%02X (mode=0x%02X, bits trame=0x%02X)", payload.modeECS, (uint8_t)getModeECS(), _modeECSFrameBits);
     
     byte buff[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
     size_t length = 0;
@@ -434,17 +432,203 @@ bool Connect::envoyerModeECS() {
     return false;
 }
 
-bool Connect::onReceive(byte* donnees, size_t length) {
-    if(! estAssocie()) {
-        return false;
+bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buff, size_t length) {
+    const uint16_t addrInformations = 0x79E0;
+    const uint16_t addrConsommation = 0x7A18;
+    const uint16_t addrDate = 0xA02B;
+    const uint16_t addrModeEcs = 0xA0FC;
+
+    auto addrIsInformations = adresseMemoire == addrInformations || adresseMemoire == (addrInformations + 0x00C8);
+    auto addrIsConsommation = adresseMemoire == addrConsommation || adresseMemoire == (addrConsommation + 0x00C8);
+    auto addrIsDate = adresseMemoire == addrDate;
+
+    if (addrIsInformations) {
+        debug("[CONNECT] Réception des informations passives du Connect.");
+        struct {
+            FrisquetRadio::RadioTrameHeader header;
+            uint8_t longueurDonnees;
+            temperature16 temperatureECS;
+            temperature16 temperatureCDC;
+            temperature16 temperatureDepartZ1;
+            temperature16 temperatureDepartZ2;
+            temperature16 temperatureDepartZ3;
+            temperature16 temperatureSondeSecuriteCDC;
+            temperature16 temperatureFumees;
+            temperature16 puissanceInstantaneeECS;
+            temperature16 puissanceInstantaneeChauffage;
+            temperature16 temperatureInconnue5;
+            pression16 pression;
+            byte i1[1] = {0};
+            byte modeECS;
+            temperature16 temperatureECSInstant;
+            byte i2[10] = {0};
+            temperature16 temperatureAmbianteZ1;
+            temperature16 temperatureAmbianteZ2;
+            temperature16 temperatureAmbianteZ3;
+            temperature16 temperatureConsigneDepartZ1;
+            temperature16 temperatureConsigneDepartZ2;
+            temperature16 temperatureConsigneDepartZ3;
+            temperature16 temperatureConsigneZ1;
+            temperature16 temperatureConsigneZ2;
+            temperature16 temperatureConsigneZ3;
+            temperature16 temperatureExterieure;
+        } resp;
+
+        if (length < sizeof(resp)) {
+            return false;
+        }
+        memcpy(&resp, buff, sizeof(resp));
+
+        if (getZone1().getSource() == Zone::SOURCE::CONNECT) {
+            getZone1().setTemperatureAmbiante(resp.temperatureAmbianteZ1.toFloat());
+            getZone1().setTemperatureConsigne(resp.temperatureConsigneZ1.toFloat());
+        }
+        getZone1().setTemperatureDepart(resp.temperatureDepartZ1.toFloat());
+        getZone1().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ1.toFloat());
+
+        if (getZone2().getSource() == Zone::SOURCE::CONNECT) {
+            getZone2().setTemperatureAmbiante(resp.temperatureAmbianteZ2.toFloat());
+            getZone2().setTemperatureConsigne(resp.temperatureConsigneZ2.toFloat());
+        }
+        getZone2().setTemperatureDepart(resp.temperatureDepartZ2.toFloat());
+        getZone2().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ2.toFloat());
+
+        if (getZone3().getSource() == Zone::SOURCE::CONNECT) {
+            getZone3().setTemperatureAmbiante(resp.temperatureAmbianteZ3.toFloat());
+            getZone3().setTemperatureConsigne(resp.temperatureConsigneZ3.toFloat());
+        }
+        getZone3().setTemperatureDepart(resp.temperatureDepartZ3.toFloat());
+        getZone3().setTemperatureConsigneDepart(resp.temperatureConsigneDepartZ3.toFloat());
+
+        if(resp.temperatureExterieure.toFloat() != 129) {
+            setTemperatureExterieure(resp.temperatureExterieure.toFloat());
+        }
+        setTemperatureECS(resp.temperatureECS.toFloat());
+        setTemperatureCDC(resp.temperatureCDC.toFloat());
+        _chaudiere.setTemperatureFumees(resp.temperatureFumees.toFloat()/2);
+        _chaudiere.setPuissanceInstantaneeECS(resp.puissanceInstantaneeECS.toFloat());
+        _chaudiere.setPuissanceInstantaneeChauffage(resp.puissanceInstantaneeChauffage.toFloat());
+        setPression(resp.pression.toFloat());
+
+        _lastRecuperationTemperatures = millis();
+        publishMqtt();
+        _zone1.publishMqtt();
+        _zone2.publishMqtt();
+        _zone3.publishMqtt();
+        return true;
     }
 
+    if (addrIsConsommation) {
+        debug("[CONNECT] Réception des consommations passives du Connect.");
+        struct {
+            FrisquetRadio::RadioTrameHeader header;
+            uint8_t longueurDonnees;
+            byte i1[18] = {0};
+            fword consommationECS;
+            fword consommationChauffage;
+            byte i2[34] = {0};
+        } resp;
+
+        if (length < sizeof(resp)) {
+            return false;
+        }
+        memcpy(&resp, buff, sizeof(resp));
+
+        setConsommationChauffage(resp.consommationChauffage.toInt16());
+        setConsommationECS(resp.consommationECS.toInt16());
+        _lastRecuperationConsommation = millis();
+        publishMqtt();
+        return true;
+    }
+
+    if(addrIsDate) {
+        debug("[CONNECT] Réception de la date passive du Connect.");
+        struct {
+            FrisquetRadio::RadioTrameHeader header;
+            uint8_t longueurDonnees;
+            byte date[6] = {0};
+            byte i1 = 0;
+            byte i2 = 0;
+        } resp;
+
+        if (length < sizeof(resp)) {
+            return false;
+        }
+        memcpy(&resp, buff, sizeof(resp));
+
+        Date date = resp.date;
+        setDate(date);
+        return true;
+    }
+
+    if (adresseMemoire == addrModeEcs) {
+        struct {
+            FrisquetRadio::RadioTrameHeader header;
+            uint8_t longueurDonnees;
+            byte i1;
+            byte modeECS;
+        } resp;
+
+        if (length < sizeof(resp)) {
+            return false;
+        }
+        memcpy(&resp, buff, sizeof(resp));
+
+        setModeECSFromRaw(resp.modeECS);
+        _lastRecuperationModeECS = millis();
+        publishMqtt();
+        return true;
+    }
+
+    return false;
+}
+
+bool Connect::onReceive(byte* donnees, size_t length) {
     ReadBuffer readBuffer(donnees, length);
 
     FrisquetRadio::RadioTrameHeader header;
     if(readBuffer.remainingLength() < sizeof(header)) { return false; }
 
     readBuffer.getBytes((byte*)&header, sizeof(header));
+
+    bool passive = getConfig().useConnectPassive();
+    if(! estAssocie() && !passive) {
+        return false;
+    }
+
+    if (header.type == FrisquetRadio::MessageType::READ) {
+        if (passive && header.idExpediteur == getId() && header.idDestinataire == ID_CHAUDIERE) {
+            if(readBuffer.remainingLength() < sizeof(FrisquetRadio::RadioTrameAsk)) { return false; }
+            FrisquetRadio::RadioTrameAsk requete;
+            readBuffer.getBytes((byte*)&requete, sizeof(requete));
+
+            size_t lengthRx = 0;
+            byte buffRx[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
+            int16_t err = radio().receiveExpected(
+                ID_CHAUDIERE,
+                getId(),
+                header.idAssociation,
+                header.idMessage,
+                header.idReception | 0x80,
+                header.type,
+                buffRx,
+                lengthRx,
+                15,
+                false
+            );
+            if (err != RADIOLIB_ERR_NONE) {
+                return false;
+            }
+
+            setIdAssociation(header.idAssociation);
+            setIdMessage(header.idMessage);
+            saveConfig();
+
+            debug("[CONNECT] Réception réponse passive lecture adresse 0x%04X", requete.adresseMemoire.toUInt16());
+            return handlePassiveReadResponse(requete.adresseMemoire.toUInt16(), buffRx, lengthRx);
+        }
+        return false;
+    }
 
     if(header.type == FrisquetRadio::MessageType::INIT) {
         FrisquetRadio::RadioTrameInit requete;
@@ -502,6 +686,11 @@ bool Connect::onReceive(byte* donnees, size_t length) {
                 default: break;
             }
 
+            if (passive) {
+                publishMqtt();
+                return true;
+            }
+
             uint8_t retry = 0;
             int16_t err;
             
@@ -537,99 +726,14 @@ bool Connect::onReceive(byte* donnees, size_t length) {
 void Connect::begin() {
 
     loadConfig();
-
-    // Initialisation MQTT
-  info("[CONNECT][MQTT] Initialisation des entités.");
-
-    // Device commun
-  MqttDevice* device = mqtt().getDevice("heltecFrisquet");
-  
-  // Entités
-    
-  // SENSOR: Température ECS
-  _mqttEntities.tempECS.id = "temperatureECS";
-  _mqttEntities.tempECS.name = "Température ECS";
-  _mqttEntities.tempECS.component = "sensor";
-  _mqttEntities.tempECS.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "temperatureECS"}), 0, true);
-  _mqttEntities.tempECS.commandTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "temperatureECS", "set"}), 0, true);
-  _mqttEntities.tempECS.set("device_class", "temperature");
-  _mqttEntities.tempECS.set("state_class", "measurement");
-  _mqttEntities.tempECS.set("unit_of_measurement", "°C");
-  mqtt().registerEntity(*device, _mqttEntities.tempECS, true);
-
-  // SENSOR: Température CDC
-  _mqttEntities.tempCDC.id = "temperatureCDC";
-  _mqttEntities.tempCDC.name = "Température CDC";
-  _mqttEntities.tempCDC.component = "sensor";
-  _mqttEntities.tempCDC.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "temperatureCDC"}), 0, true);
-  _mqttEntities.tempCDC.set("device_class", "temperature");
-  _mqttEntities.tempCDC.set("state_class", "measurement");
-  _mqttEntities.tempCDC.set("unit_of_measurement", "°C");
-  mqtt().registerEntity(*device, _mqttEntities.tempCDC, true);
-
-  // SENSOR: Température extérieure
-  _mqttEntities.tempExterieure.id = "temperatureExterieure";
-  _mqttEntities.tempExterieure.name = "Température extérieure";
-  _mqttEntities.tempExterieure.component = "sensor";
-  if(getConfig().useSondeExterieure() && !getConfig().useDS18B20()) {
-    _mqttEntities.tempExterieure.component = "number";
-  }
-  _mqttEntities.tempExterieure.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "sondeExterieure", "temperatureExterieure"}), 0, true);
-  _mqttEntities.tempExterieure.set("device_class", "temperature");
-  _mqttEntities.tempExterieure.set("state_class", "measurement");
-  _mqttEntities.tempExterieure.set("unit_of_measurement", "°C");
-  mqtt().registerEntity(*device, _mqttEntities.tempExterieure, true);
-
-  // SENSOR: Consommation chauffage
-  _mqttEntities.consommationChauffage.id = "consommationChauffage";
-  _mqttEntities.consommationChauffage.name = "Consommation chauffage";
-  _mqttEntities.consommationChauffage.component = "sensor";
-  _mqttEntities.consommationChauffage.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "consommationChauffage"}), 0, true);
-  _mqttEntities.consommationChauffage.set("device_class", "energy");
-  _mqttEntities.consommationChauffage.set("state_class", "total_increasing");
-  _mqttEntities.consommationChauffage.set("unit_of_measurement", "kWh");
-  mqtt().registerEntity(*device, _mqttEntities.consommationChauffage, true);
-
-  // SENSOR: Consommation ECS
-  _mqttEntities.consommationECS.id = "consommationECS";
-  _mqttEntities.consommationECS.name = "Consommation ECS";
-  _mqttEntities.consommationECS.component = "sensor";
-  _mqttEntities.consommationECS.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "consommationECS"}), 0, true);
-  _mqttEntities.consommationECS.set("device_class", "energy");
-  _mqttEntities.consommationECS.set("state_class", "total_increasing");
-  _mqttEntities.consommationECS.set("unit_of_measurement", "kWh");
-  mqtt().registerEntity(*device, _mqttEntities.consommationECS, true);
-
-   // SELECT: Mode ECS
-    _mqttEntities.modeECS.id = "modeECS";
-    _mqttEntities.modeECS.name = "Mode ECS";
-    _mqttEntities.modeECS.component = "select";
-    _mqttEntities.modeECS.stateTopic   = MqttTopic(MqttManager::compose({device->baseTopic,"connect", "modeECS"}), 0, true);
-    _mqttEntities.modeECS.commandTopic = MqttTopic(MqttManager::compose({device->baseTopic,"connect", "modeECS","set"}), 0, true);
-    _mqttEntities.modeECS.set("icon", "mdi:tune-variant");
-    _mqttEntities.modeECS.set("entity_category", "config");
-    _mqttEntities.modeECS.setRaw("options", R"(["Max","Eco","Eco Horaires","Eco+", "Eco+ Horaires", "Stop"])");
-    mqtt().registerEntity(*device, _mqttEntities.modeECS, true);
-    mqtt().onCommand(_mqttEntities.modeECS, [&](const String& payload){
-        info("[CONNECT] Changement du mode  ECS : %s.", payload.c_str());
-        setModeECS(payload);
-        if(envoyerModeECS()) {
-            mqtt().publishState(_mqttEntities.modeECS, getNomModeECS());
-        }
-    });
-
-  // SENSOR: Pression
-  _mqttEntities.pression.id = "pression";
-  _mqttEntities.pression.name = "Pression";
-  _mqttEntities.pression.component = "sensor";
-  _mqttEntities.pression.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic, "connect", "pression"}), 0, true);
-  _mqttEntities.pression.set("device_class", "pressure");  
-  _mqttEntities.pression.set("unit_of_measurement", "bar");
-  mqtt().registerEntity(*device, _mqttEntities.pression, true);
 }
 
 void Connect::loop() {
     uint32_t now = millis();
+
+    if (getConfig().useConnectPassive()) {
+        return;
+    }
 
     if(estAssocie()) {
         if (now - _lastRecuperationTemperatures >= 300000 || _lastRecuperationTemperatures == 0) { // 5 minutes
@@ -716,44 +820,13 @@ void Connect::envoiZones() {
 }
 
 void Connect::publishMqtt() {
-    if( !isnan(getTemperatureECS())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureECS"), getTemperatureECS());
-    }
-    if( !isnan(getTemperatureCDC())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureCDC"), getTemperatureCDC());
-    }
-    if( !isnan(getTemperatureExterieure())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureExterieure"), getTemperatureExterieure());
-    }
-
-    if( getConsommationChauffage() >= 0) {
-        static float lastConsommationChauffage = -1;
-        if(lastConsommationChauffage != getConsommationChauffage()) {
-            lastConsommationChauffage = getConsommationChauffage();
-            mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("consommationChauffage"), getConsommationChauffage());
-        }
-    }
-    if( getConsommationECS() >= 0 && getConsommationECS()) {
-        static float lastConsommationECS = -1;
-        if(lastConsommationECS != getConsommationECS()) {
-            lastConsommationECS = getConsommationECS();
-            mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("consommationECS"), getConsommationECS());
-        }
-    }
-
-    if(getModeECS() != MODE_ECS::INCONNU) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("modeECS"), getNomModeECS().c_str());
-    }
-    
-    if( !isnan(getPression())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("pression"), getPression());
-    }
+    _chaudiere.publishMqtt();
 }
 
 void Connect::setPression(float pression) {
-    _pression = pression;
+    _chaudiere.setPression(pression);
 }
 
 float Connect::getPression() {
-    return _pression;
+    return _chaudiere.getPression();
 }

@@ -1,11 +1,13 @@
 #include "FrisquetManager.h"
+#include "Version.h"
 #include "Buffer.h"
 
 FrisquetManager::FrisquetManager(FrisquetRadio &radio, Config &cfg, MqttManager &mqtt)
     :   _radio(radio), _cfg(cfg), _mqtt(mqtt),
         _zone1(ID_ZONE_1, mqtt), _zone2(ID_ZONE_2, mqtt), _zone3(ID_ZONE_3, mqtt),
-        _sondeExterieure(radio, cfg, mqtt), _connect(radio, cfg, mqtt, _zone1, _zone2, _zone3),
-        _satelliteZ1(radio, cfg, mqtt, _zone1), _satelliteZ2(radio, cfg, mqtt, _zone2), _satelliteZ3(radio, cfg, mqtt, _zone3) {}
+        _chaudiere(mqtt, cfg),
+        _sondeExterieure(radio, cfg, mqtt), _connect(radio, cfg, mqtt, _zone1, _zone2, _zone3, _chaudiere),
+        _satelliteZ1(radio, cfg, mqtt, _zone1, _chaudiere), _satelliteZ2(radio, cfg, mqtt, _zone2, _chaudiere), _satelliteZ3(radio, cfg, mqtt, _zone3, _chaudiere) {}
 
 void FrisquetManager::begin()
 {
@@ -48,9 +50,22 @@ void FrisquetManager::begin()
         _zone3.begin();
     }
 
+    const bool useSatellite = _cfg.useSatelliteZ1() || _cfg.useSatelliteZ2() || _cfg.useSatelliteZ3();
+    if (_cfg.useConnect() || useSatellite) {
+        if (_cfg.useConnect()) {
+            _chaudiere.begin([this](const String& payload) {
+                _connect.handleModeEcsCommand(payload);
+            });
+        } else {
+            _chaudiere.begin();
+        }
+    }
+
     if (_cfg.useConnect()) {
         _connect.begin();
-        _connect.recupererDate();
+        if (!_cfg.useConnectPassive()) {
+            _connect.recupererDate();
+        }
     }
 
     if (_cfg.useSondeExterieure()) {
@@ -71,7 +86,7 @@ void FrisquetManager::begin()
         _satelliteZ3.begin(_cfg.useSatelliteVirtualZ3());
     }
 
-    _mqtt.publishAvailability(*_mqtt.getDevice("heltecFrisquet"), true);
+    _mqtt.publishAvailability(*_mqtt.getDevice("openFrisquetVisio"), true);
 
     _radio.onReceive([]()
                      {
@@ -85,7 +100,7 @@ void FrisquetManager::loop()
 {
     uint32_t now = millis();
 
-    if (FrisquetRadio::receivedFlag) { // Réception données radio
+    if (FrisquetRadio::receivedFlag || _radio.hasBufferedPacket()) { // Réception données radio
         onRadioReceive();
     }
 
@@ -138,12 +153,12 @@ void FrisquetManager::initMqtt()
     info("[MQTT] Initialisation du device MQTT.");
 
     // Device commun
-    _device.deviceId = "heltecFrisquet";
-    _device.name = "Heltec Frisquet";
-    _device.model = "Heltec Frisquet ";
+    _device.deviceId = "openFrisquetVisio";
+    _device.name = "OpenFrisquetVisio";
+    _device.model = "OpenFrisquetVisio";
     _device.manufacturer = "FreedomNX Lab";
     _device.baseTopic = _cfg.getMQTTOptions().baseTopic;
-    _device.swVersion = "2.0.0";
+    _device.swVersion = OPENFRISQUETVISIO_VERSION;
     _mqtt.registerDevice(_device);
 }
 
@@ -154,16 +169,22 @@ void FrisquetManager::onRadioReceive()
 
     byte buff[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
     size_t length = 0;
-    int16_t err = _radio.readData(buff, 0);
+    int16_t err = RADIOLIB_ERR_NONE;
 
-    if (err != RADIOLIB_ERR_NONE)
-    {
-        FrisquetRadio::interruptReceive = false;
-        return;
+    if (_radio.popBufferedPacket(buff, length)) {
+        info("[RADIO] Réutilisation paquet bufferisé : %d bytes", length);
+    } else {
+        err = _radio.readData(buff, 0);
+
+        if (err != RADIOLIB_ERR_NONE)
+        {
+            FrisquetRadio::interruptReceive = false;
+            return;
+        }
+
+        length = _radio.getPacketLength();
+        _radio.startReceive();
     }
-
-    length = _radio.getPacketLength();
-    _radio.startReceive();
 
     info("[RADIO] Réception données radio : %d bytes", length);
 
@@ -176,7 +197,9 @@ void FrisquetManager::onRadioReceive()
     }
 
     FrisquetRadio::RadioTrameHeader *header = (FrisquetRadio::RadioTrameHeader *)buff;
-    if (header->idDestinataire == _connect.getId() && _cfg.useConnect()) {
+    if (_cfg.useConnect() &&
+        (header->idDestinataire == _connect.getId() ||
+         (_cfg.useConnectPassive() && header->idExpediteur == _connect.getId() && header->idDestinataire == ID_CHAUDIERE))) {
         info("[RADIO] Traitement données Connect");
         _connect.onReceive(buff, length);
     } else if (header->idDestinataire == _satelliteZ1.getId() && _cfg.useSatelliteZ1() && _cfg.useSatelliteVirtualZ1()) {

@@ -44,7 +44,7 @@ void Zone::begin() {
     loadConfig();
 
     // Device commun
-    MqttDevice* device = mqtt().getDevice("heltecFrisquet");
+    MqttDevice* device = mqtt().getDevice("openFrisquetVisio");
 
     // SELECT: Mode zone
     _mqttEntities.mode.id = "modeChauffageZ" + String(getNumeroZone());
@@ -110,7 +110,7 @@ void Zone::begin() {
     _mqttEntities.temperatureConsigne.set("device_class", "temperature");
     _mqttEntities.temperatureConsigne.set("state_class", "measurement");
     _mqttEntities.temperatureConsigne.set("unit_of_measurement", "°C");
-    if(getSource() == SOURCE::SATELLITE_VIRTUEL) {
+    if(getSource() == SOURCE::SATELLITE_VIRTUEL || getSource() == SOURCE::CONNECT) {
         /*_mqttEntities.temperatureConsigne.component = "number";
         _mqttEntities.temperatureConsigne.set("min", "5");
         _mqttEntities.temperatureConsigne.set("max", "30");
@@ -121,7 +121,50 @@ void Zone::begin() {
             float temperature = payload.toFloat();
             if(!isnan(temperature)) {
                 info("[ZONE Z%d] Modification de la température consigne à %0.2f.", getNumeroZone(), temperature);
-                setTemperatureConsigne(temperature);
+
+                if(getSource() == SOURCE::CONNECT) {
+                    const char* profilModifie = "Consigne";
+                    switch(getMode()) {
+                        case MODE_ZONE::CONFORT:
+                            profilModifie = "Confort";
+                            setTemperatureConfort(temperature);
+                            setTemperatureConsigne(boostActif() ? (getTemperatureConfort() + getTemperatureBoost()) : getTemperatureConfort());
+                            mqtt().publishState(_mqttEntities.temperatureConfort, getTemperatureConfort());
+                            break;
+                        case MODE_ZONE::REDUIT:
+                            profilModifie = "Réduit";
+                            setTemperatureReduit(temperature);
+                            setTemperatureConsigne(getTemperatureReduit());
+                            mqtt().publishState(_mqttEntities.temperatureReduit, getTemperatureReduit());
+                            break;
+                        case MODE_ZONE::HORS_GEL:
+                            profilModifie = "Hors Gel";
+                            setTemperatureHorsGel(temperature);
+                            setTemperatureConsigne(getTemperatureHorsGel());
+                            mqtt().publishState(_mqttEntities.temperatureHorsGel, getTemperatureHorsGel());
+                            break;
+                        case MODE_ZONE::AUTO:
+                            if((getModeOptions() & 0b00000001) != 0) {
+                                profilModifie = "Auto-Confort";
+                                setTemperatureConfort(temperature);
+                                setTemperatureConsigne(getTemperatureConfort());
+                                mqtt().publishState(_mqttEntities.temperatureConfort, getTemperatureConfort());
+                            } else {
+                                profilModifie = "Auto-Réduit";
+                                setTemperatureReduit(temperature);
+                                setTemperatureConsigne(getTemperatureReduit());
+                                mqtt().publishState(_mqttEntities.temperatureReduit, getTemperatureReduit());
+                            }
+                            break;
+                        default:
+                            setTemperatureConsigne(temperature);
+                            break;
+                    }
+                    info("[ZONE Z%d][CONNECT] Profil modifié via consigne: %s.", getNumeroZone(), profilModifie);
+                } else {
+                    setTemperatureConsigne(temperature);
+                }
+
                 mqtt().publishState(_mqttEntities.temperatureConsigne, getTemperatureConsigne());
                 refreshLastChange();
                 saveConfig();
@@ -214,6 +257,16 @@ void Zone::begin() {
     _mqttEntities.temperatureDepart.set("state_class", "measurement");
     _mqttEntities.temperatureDepart.set("unit_of_measurement", "°C");
     mqtt().registerEntity(*device, _mqttEntities.temperatureDepart, true);
+
+    // SENSOR: Température consigne départ
+    _mqttEntities.temperatureConsigneDepart.id = "temperatureConsigneDepartZ" + String(getNumeroZone());
+    _mqttEntities.temperatureConsigneDepart.name = "Température Consigne Départ Z" + String(getNumeroZone());
+    _mqttEntities.temperatureConsigneDepart.component = "sensor";
+    _mqttEntities.temperatureConsigneDepart.stateTopic = MqttTopic(MqttManager::compose({device->baseTopic,"z" + String(getNumeroZone()),"temperatureConsigneDepart"}), 0, true);
+    _mqttEntities.temperatureConsigneDepart.set("device_class", "temperature");
+    _mqttEntities.temperatureConsigneDepart.set("state_class", "measurement");
+    _mqttEntities.temperatureConsigneDepart.set("unit_of_measurement", "°C");
+    mqtt().registerEntity(*device, _mqttEntities.temperatureConsigneDepart, true);
 
     // SENSOR: Température boost
     _mqttEntities.temperatureBoost.id = "temperatureBoostZ" + String(getNumeroZone());
@@ -338,6 +391,9 @@ void Zone::setTemperatureBoost(float temperature) {
 void Zone::setTemperatureDepart(float temperature) {
     this->_temperatureDepart = temperature;
 }
+void Zone::setTemperatureConsigneDepart(float temperature) {
+    this->_temperatureConsigneDepart = temperature;
+}
 
 float Zone::getTemperatureConfort() {
     return this->_temperatureConfort;
@@ -356,6 +412,9 @@ float Zone::getTemperatureAmbiante() {
 }
 float Zone::getTemperatureDepart() {
     return this->_temperatureDepart;
+}
+float Zone::getTemperatureConsigneDepart() {
+    return this->_temperatureConsigneDepart;
 }
 float Zone::getTemperatureBoost() {
     return this->_temperatureBoost;
@@ -468,30 +527,33 @@ bool Zone::derogationActive() {
 
 
 void Zone::publishMqtt() {
-    mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("thermostatZ" + String(getNumeroZone())), "auto");
+    mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("thermostatZ" + String(getNumeroZone())), "auto");
     if(!isnan(getTemperatureAmbiante())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureAmbianteZ" + String(getNumeroZone())), getTemperatureAmbiante());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureAmbianteZ" + String(getNumeroZone())), getTemperatureAmbiante());
     }
     if(!isnan(getTemperatureConsigne())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureConsigneZ" + String(getNumeroZone())), getTemperatureConsigne());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureConsigneZ" + String(getNumeroZone())), getTemperatureConsigne());
     }
     if(!isnan(getTemperatureDepart())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureDepartZ" + String(getNumeroZone())), getTemperatureDepart());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureDepartZ" + String(getNumeroZone())), getTemperatureDepart());
+    }
+    if(!isnan(getTemperatureConsigneDepart())) {
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureConsigneDepartZ" + String(getNumeroZone())), getTemperatureConsigneDepart());
     }
     if(!isnan(getTemperatureConfort())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureConfortZ" + String(getNumeroZone())), getTemperatureConfort());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureConfortZ" + String(getNumeroZone())), getTemperatureConfort());
     }
     if(!isnan(getTemperatureReduit())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureReduitZ" + String(getNumeroZone())), getTemperatureReduit());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureReduitZ" + String(getNumeroZone())), getTemperatureReduit());
     }
     if(!isnan(getTemperatureHorsGel())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureHorsGelZ" + String(getNumeroZone())), getTemperatureHorsGel());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureHorsGelZ" + String(getNumeroZone())), getTemperatureHorsGel());
     }
     if(!isnan(getTemperatureBoost())) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("temperatureBoostZ" + String(getNumeroZone())), getTemperatureBoost());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("temperatureBoostZ" + String(getNumeroZone())), getTemperatureBoost());
     }
-    mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("boostZ" + String(getNumeroZone())), boostActif() ? "ON" : "OFF");
+    mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("boostZ" + String(getNumeroZone())), boostActif() ? "ON" : "OFF");
     if(getMode() != Zone::MODE_ZONE::INCONNU) {
-        mqtt().publishState(*mqtt().getDevice("heltecFrisquet")->getEntity("modeChauffageZ" + String(getNumeroZone())), getNomMode().c_str());
+        mqtt().publishState(*mqtt().getDevice("openFrisquetVisio")->getEntity("modeChauffageZ" + String(getNumeroZone())), getNomMode().c_str());
     }
 }

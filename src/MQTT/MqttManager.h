@@ -10,7 +10,7 @@
 class MqttManager {
 public:
   struct Options {
-    String clientId = "Heltec Frisquet";
+    String clientId = "OpenFrisquetVisio";
     String host = "192.168.1.10";
     uint16_t port = 1883;
     String username;
