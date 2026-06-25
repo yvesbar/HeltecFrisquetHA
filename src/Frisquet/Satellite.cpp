@@ -60,7 +60,13 @@ void Satellite::loop() {
     if(firstLoop && !_modeVirtuel) {
         firstLoop = false;
         publishMqtt();
-        _zone.publishMqtt();
+        // publish zone only if configured
+        switch (_zone.getNumeroZone()) {
+            case 1: if (getConfig().useZone1()) _zone.publishMqtt(); break;
+            case 2: if (getConfig().useZone2()) _zone.publishMqtt(); break;
+            case 3: if (getConfig().useZone3()) _zone.publishMqtt(); break;
+            default: break;
+        }
     }
 
     uint32_t now = millis();
@@ -72,19 +78,29 @@ void Satellite::loop() {
     if(firstLoop) {
         recupererInfosChaudiere();
         publishMqtt();
-        _zone.publishMqtt();
+        switch (_zone.getNumeroZone()) {
+            case 1: if (getConfig().useZone1()) _zone.publishMqtt(); break;
+            case 2: if (getConfig().useZone2()) _zone.publishMqtt(); break;
+            case 3: if (getConfig().useZone3()) _zone.publishMqtt(); break;
+            default: break;
+        }
         firstLoop = false;
     }
 
     if ((_zone.getLastChange() > _zone.getLastEnvoi() && (_zone.getLastChange() + 15000) < now ) || now - _lastEnvoiConsigne >= 600000  ) { // dernier changement ou 10 minutes
         info("[SATELLITE Z%d] Envoi de la consigne.", getNumeroZone());
         _zone.refreshLastEnvoi();
-        if(envoyerConsigne()) {
-            incrementIdMessage(3);
-            _lastEnvoiConsigne = now;
-            _zone.publishMqtt();
-            publishMqtt();
-        } else {
+            if(envoyerConsigne()) {
+                incrementIdMessage(3);
+                _lastEnvoiConsigne = now;
+                switch (_zone.getNumeroZone()) {
+                    case 1: if (getConfig().useZone1()) _zone.publishMqtt(); break;
+                    case 2: if (getConfig().useZone2()) _zone.publishMqtt(); break;
+                    case 3: if (getConfig().useZone3()) _zone.publishMqtt(); break;
+                    default: break;
+                }
+                publishMqtt();
+            } else {
             error("[SATELLITE Z%d] Echec de l'envoi.", getNumeroZone());
             _lastEnvoiConsigne = now <= 60000 ? 1 : now - 60000;
         }

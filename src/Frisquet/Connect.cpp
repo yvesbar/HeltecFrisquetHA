@@ -494,7 +494,13 @@ bool Connect::onReceive(byte* donnees, size_t length) {
             //Sauvegarde de la conf de la zone en NVs
             getZone(zoneId).saveConfig();
             info("[CONNECT] Mise à jour zone %d (id %d), publication MQTT locale.", getZone(zoneId).getNumeroZone(), zoneId );
-            getZone(zoneId).publishMqtt();
+            // Publish MQTT for the zone only if the zone is enabled in config
+            switch (getZone(zoneId).getNumeroZone()) {
+                case 1: if (getConfig().useZone1()) getZone(zoneId).publishMqtt(); break;
+                case 2: if (getConfig().useZone2()) getZone(zoneId).publishMqtt(); break;
+                case 3: if (getConfig().useZone3()) getZone(zoneId).publishMqtt(); break;
+                default: break;
+            }
 
             uint8_t retry = 0;
             int16_t err;
@@ -631,9 +637,9 @@ void Connect::loop() {
             if(recupererInformations()) {
                 _lastRecuperationTemperatures = now;
                 publishMqtt();
-                _zone1.publishMqtt();
-                _zone2.publishMqtt();
-                _zone3.publishMqtt();
+                if (getConfig().useZone1()) _zone1.publishMqtt();
+                if (getConfig().useZone2()) _zone2.publishMqtt();
+                if (getConfig().useZone3()) _zone3.publishMqtt();
             } else {
                 _lastRecuperationTemperatures = now <= 60000 ? 1 : now - 60000;
                 error("[CONNECT] Échec de la récupération des températures.");
