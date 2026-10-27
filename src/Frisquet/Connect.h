@@ -5,6 +5,7 @@
 #include "../Logs.h"
 #include "Zone.h"
 #include "Chaudiere.h"
+#include "RadioSchedule.h"
 
 class Connect : public FrisquetDevice {
     
@@ -40,6 +41,7 @@ class Connect : public FrisquetDevice {
         bool envoyerModeECS();
         bool recupererInformations();
         bool recupererConsommation();
+        bool recupererConsommationAnnuelle();
         bool recupererModeECS();
 
         float getTemperatureExterieure();
@@ -70,6 +72,7 @@ class Connect : public FrisquetDevice {
 
         void setConsommationECS(int16_t consommation);
         void setConsommationChauffage(int16_t consommation);
+        bool setConsommationAnnuelle(const byte* donnees, size_t length);
 
         void setPression(float pression);
         float getPression();
@@ -87,5 +90,9 @@ class Connect : public FrisquetDevice {
         uint32_t _lastRecuperationModeECS = 0;
         uint32_t _lastRecuperationConsommation = 0;
         uint32_t _lastEnvoiZone = 0;
+        RadioSchedule _temperatureSchedules[3];
+        RadioSchedule _consommationSchedule;
+        RadioSchedule _ecsSchedule;
+        bool _initialReadPending = true;
         uint8_t _modeECSFrameBits = 0x01;
 };

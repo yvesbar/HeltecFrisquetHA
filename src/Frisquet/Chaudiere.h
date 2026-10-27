@@ -54,6 +54,12 @@ public:
         ECOPLUS_HORAIRES = 0x20
     };
 
+    enum MODE_FONCTIONNEMENT : uint8_t {
+        FONCTIONNEMENT_INCONNU = 0xFF,
+        CHAUFFAGE_RADIATEURS = 0x05,
+        CHAUFFAGE_ECS = 0x07
+    };
+
     Chaudiere(MqttManager& mqtt, Config& cfg) : _mqtt(mqtt), _cfg(cfg) {}
 
     void begin(std::function<void(const String&)> modeEcsCommandCb = {});
@@ -79,15 +85,27 @@ public:
     int16_t getConsommationChauffage() const { return _consommationGazChauffage; }
     int16_t getConsommationECS() const { return _consommationGazECS; }
 
+    // Cumul de l'année en cours (somme des compteurs mensuels 0xA063).
+    void setConsommationAnnuelle(int32_t chauffage, int32_t ecs);
+    int32_t getConsommationAnnuelleChauffage() const { return _consommationAnnuelleChauffage; }
+    int32_t getConsommationAnnuelleECS() const { return _consommationAnnuelleECS; }
+
     bool setModeECS(MODE_ECS modeECS);
     bool setModeECS(const String& modeECS);
     MODE_ECS getModeECS() const { return _modeECS; }
     String getNomModeECS() const;
 
+    void setModeFonctionnement(uint16_t modeFonctionnement);
+    MODE_FONCTIONNEMENT getModeFonctionnement() const { return _modeFonctionnement; }
+    uint16_t getModeFonctionnementRaw() const { return _modeFonctionnementRaw; }
+    String getNomModeFonctionnement() const;
+    String getNomEtatChaudiere() const;
+    bool etatChaudiereConnu() const { return _etatChaudiereConnu; }
+
     void setPression(float pression);
     float getPression() const { return _pression; }
 
-    void setEtatChaudiere(byte etatChaudiere) { _etatChaudiere.set(etatChaudiere); }
+    void setEtatChaudiere(byte etatChaudiere) { _etatChaudiere.set(etatChaudiere); _etatChaudiereConnu = true; }
     ETAT_CHAUDIERE getEtatChaudiere() const { return _etatChaudiere; }
 
 private:
@@ -106,13 +124,23 @@ private:
     int16_t _consommationGazChauffage = -1;
 
     MODE_ECS _modeECS = MODE_ECS::INCONNU;
+    MODE_FONCTIONNEMENT _modeFonctionnement = MODE_FONCTIONNEMENT::FONCTIONNEMENT_INCONNU;
+    uint16_t _modeFonctionnementRaw = 0xFFFF;
 
     int16_t _lastPubConsommationECS = -1;
     int16_t _lastPubConsommationChauffage = -1;
+
+    int32_t _consommationAnnuelleChauffage = -1;
+    int32_t _consommationAnnuelleECS = -1;
+    int32_t _lastPubConsommationAnnuelleChauffage = -1;
+    int32_t _lastPubConsommationAnnuelleECS = -1;
     ETAT_CHAUDIERE _etatChaudiere;
+    bool _etatChaudiereConnu = false;
 
     struct {
         MqttEntity etatChaudiere;
+        MqttEntity anomalieChaudiere;
+        MqttEntity modeFonctionnement;
         MqttEntity modeECS;
         MqttEntity tempECS;
         MqttEntity tempCDC;
@@ -122,6 +150,8 @@ private:
         MqttEntity puissanceInstantaneeChauffage;
         MqttEntity consommationChauffage;
         MqttEntity consommationECS;
+        MqttEntity consommationAnnuelleChauffage;
+        MqttEntity consommationAnnuelleECS;
         MqttEntity pression;
     } _mqttEntities;
 };
