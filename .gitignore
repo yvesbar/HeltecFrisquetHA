@@ -9,17 +9,28 @@ platformio.ini
 docs/
 tools/*
 !tools/generate_web_assets.py
+!tools/web_assets.py
 !tools/version.py
 tests/*
 !tests/test_radio_crc.py
 !tests/radio_crc_test.cpp
 !tests/test_portal_auth.py
 !tests/portal-password.test.mjs
+!tests/test_ota_auth.py
+!tests/test_web_assets.py
 
 !tests/test_zone_modes.py
+!tests/test_satellite_mode.py
 !tests/test_boiler_state.py
 !tests/boiler-state.test.mjs
 
 !tests/test_sx1276_radio.py
 
 !tests/portal-theme.test.mjs
+!tests/test_config_migration.py
+!tests/test_mqtt_discovery_cleanup.py
+!tests/test_portal_logs.py
+!tests/portal_logs_test.cpp
+!tests/portal-polling.test.mjs
+!tests/test_boiler_firmware.py
+!tests/test_firmware_version.py

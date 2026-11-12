@@ -3,6 +3,8 @@ import re
 from datetime import datetime
 
 
+Import("env")
+
 try:
     script_dir = os.path.dirname(__file__)
     ROOT = os.path.abspath(os.path.join(script_dir, ".."))
@@ -18,6 +20,12 @@ README_PATH = os.path.join(ROOT, "README.md")
 
 
 def generate_version():
+    # La CI fournit une version commune aux quatre compilations parallèles.
+    version = os.environ.get("OPENFRISQUETVISIO_VERSION")
+    if version is not None:
+        if not re.fullmatch(r"\d{2}\.\d{2}\.\d{2}(?:\.\d{4})?", version):
+            raise ValueError("OPENFRISQUETVISIO_VERSION doit être au format AA.MM.JJ ou AA.MM.JJ.HHmm")
+        return version
     # Format: YY.MM.DD.HHmm
     return datetime.now().strftime("%y.%m.%d.%H%M")
 
@@ -66,6 +74,8 @@ def main():
     version = generate_version()
     update_version_header(version)
     update_readme(version)
+    # Lu par generate_web_assets.py, qui l’inscrit dans les pages du portail.
+    env["OPENFRISQUETVISIO_VERSION"] = version
 
 
 main()

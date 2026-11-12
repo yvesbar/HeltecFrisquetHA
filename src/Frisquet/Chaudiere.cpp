@@ -67,6 +67,8 @@ void Chaudiere::begin(std::function<void(const String&)> modeEcsCommandCb) {
     _mqttEntities.tempExterieure.set("device_class", "temperature");
     _mqttEntities.tempExterieure.set("state_class", "measurement");
     _mqttEntities.tempExterieure.set("unit_of_measurement", "°C");
+    _mqtt.removeEntityDiscovery(*device, _mqttEntities.tempExterieure,
+        _mqttEntities.tempExterieure.component == "number" ? "sensor" : "number");
     _mqtt.registerEntity(*device, _mqttEntities.tempExterieure, true);
 
     _mqttEntities.puissanceInstantaneeECS.id = "puissanceInstantaneeECS";
@@ -168,7 +170,7 @@ void Chaudiere::publishMqtt() {
     if (!isnan(getTemperatureFumees())) {
         _mqtt.publishState(_mqttEntities.tempFumees, getTemperatureFumees());
     }
-    if (!isnan(getTemperatureExterieure())) {
+    if (!_cfg.useSondeExterieure() && !isnan(getTemperatureExterieure())) {
         _mqtt.publishState(_mqttEntities.tempExterieure, getTemperatureExterieure());
     }
     if (!isnan(getPuissanceInstantaneeECS())) {
@@ -249,15 +251,18 @@ String Chaudiere::getNomModeFonctionnement() const {
 }
 
 String Chaudiere::getNomEtatChaudiere() const {
-    // Utiliser uniquement les indicateurs de fonctionnement et le mode radio.
+    // Le bit "fonctionnement" du satellite ne reflète que la zone chauffage :
+    // pendant une relance ECS il reste à 0. On donne donc la priorité au mode
+    // radio (trame Connect) quand il indique une production d'eau chaude.
+    if(getModeFonctionnement() == MODE_FONCTIONNEMENT::CHAUFFAGE_ECS) return "Chauffage ECS";
     if(etatChaudiereConnu() && !_etatChaudiere.fonctionnement) return "Veille";
     switch(getModeFonctionnement()) {
-        case MODE_FONCTIONNEMENT::CHAUFFAGE_ECS:
-            return "Chauffage ECS";
         case MODE_FONCTIONNEMENT::CHAUFFAGE_RADIATEURS:
             return etatChaudiereConnu() && _etatChaudiere.arretChauffage ? "Veille" : "Chauffage";
         default:
-            return "Inconnu";
+            // Sans Connect, le satellite reçoit l'état général mais pas
+            // le mode détaillé permettant de distinguer chauffage et ECS.
+            return etatChaudiereConnu() && _etatChaudiere.fonctionnement ? "Fonctionnement" : "Inconnu";
     }
 }
 

@@ -487,6 +487,7 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                 
                 size_t lengthRx = 0;
                 byte buffZones[RADIOLIB_SX126X_MAX_PACKET_LENGTH];
+                byte modeObserve = MODE::INCONNU;
 
                 if(! getEcrasement()) {
                     delay(300);
@@ -520,22 +521,30 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                         temperature16 temperatureAmbianteZ1;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         temperature16 temperatureConsigneZ1;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         byte i2 = 0x00;
-                        uint8_t modeZ1 = 0x00;                       // 0x05 auto - 0x06 confort - 0x07 reduit - 0x08 hors gel
+                        uint8_t modeZ1 = 0x00;                       // Options A02F : Auto 0x20, Confort 0x01, Boost 0x40
                         byte i3[4] = {0x00, 0xC6, 0x00, 0xC6};
                         temperature16 temperatureAmbianteZ2;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         temperature16 temperatureConsigneZ2;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         byte i4 = 0x00;
-                        uint8_t modeZ2 = 0x00;                       // 0x05 auto - 0x06 confort - 0x07 reduit - 0x08 hors gel
+                        uint8_t modeZ2 = 0x00;                       // Même format A02F pour la zone 2
                         byte i5[4] = {0x00, 0x00, 0x00, 0x00};
                         temperature16 temperatureAmbianteZ3;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         temperature16 temperatureConsigneZ3;    // Début 5°C -> 0 = 50 = 5°C - MAX 30°C
                         byte i6 = 0x00;
-                        uint8_t modeZ3 = 0x00;                       // 0x05 auto - 0x06 confort - 0x07 reduit - 0x08 hors gel
+                        uint8_t modeZ3 = 0x00;                       // Même format A02F pour la zone 3
                         byte i7[4] = {0x00, 0x00, 0x00, 0x00};
                     }* donneesZones = (donneesZones_t*)readBuffer.getBytes(sizeof(donneesZones_t));
 
                     if(lengthRx < sizeof(donneesZones_t)) {
                         return false;
+                    }
+
+                    // Ces octets utilisent le format A02F (ex. 0x25 = Auto
+                    // Confort), pas l'énumération Zone::MODE_ZONE d'A154.
+                    switch(getNumeroZone()) {
+                        case 1: modeObserve = donneesZones->modeZ1; break;
+                        case 2: modeObserve = donneesZones->modeZ2; break;
+                        case 3: modeObserve = donneesZones->modeZ3; break;
                     }
 
                     setEtatChaudiere(donneesZones->etatChaudiere);
@@ -552,9 +561,11 @@ bool Satellite::onReceive(byte* donnees, size_t length) {
                     const byte optionsDemandees = _zone.getModeOptions();
                     const bool commandeConnectEnAttente = _zone.getSource() == Zone::SOURCE::CONNECT
                         && _zone.getLastChange() > _zone.getLastEnvoi();
-                    setModeFromRaw(donneesSatellite->mode);
-                    if(_zone.getSource() == Zone::SOURCE::SATELLITE_PHYSIQUE) {
-                        _zone.desactiverBoost();
+                    // La réponse chaudière confirme aussi une zone Connect,
+                    // sans attendre une nouvelle écriture de configuration A154.
+                    const byte modeConfirme = _zone.getSource() == Zone::SOURCE::CONNECT
+                        ? modeObserve : donneesSatellite->mode;
+                    if(setModeFromRaw(modeConfirme)) {
                         _zone.confirmerMode();
                     }
                     if(commandeConnectEnAttente) {
@@ -669,68 +680,48 @@ void Satellite::setMode(Satellite::MODE mode) {
     }
 }
 
-Satellite::MODE Satellite::decodeModeFromRaw(uint8_t rawMode, bool* compatConnect) const {
-    auto decodeDirect = [](uint8_t modeValue) -> MODE {
-        switch (modeValue) {
-            case MODE::REDUIT_PERMANENT:
-            case MODE::CONFORT_PERMANENT:
-            case MODE::REDUIT_DEROGATION:
-            case MODE::CONFORT_DEROGATION:
-            case MODE::REDUIT_AUTO:
-            case MODE::CONFORT_AUTO:
-            case MODE::HORS_GEL:
-                return (MODE)modeValue;
-            default:
-                return MODE::INCONNU;
-        }
-    };
-
-    MODE direct = decodeDirect(rawMode);
-    if (direct != MODE::INCONNU) {
-        if (compatConnect) {
-            *compatConnect = false;
-        }
-        return direct;
+Satellite::MODE Satellite::decodeModeFromRaw(uint8_t rawMode) const {
+    if (rawMode == MODE::HORS_GEL) {
+        return MODE::HORS_GEL;
+    }
+    if (rawMode & ~MODE_BITS_CONNUS) {
+        return MODE::INCONNU;
     }
 
-    uint8_t xorMode = rawMode ^ MODE_CONNECT_COMPAT_XOR;
-    MODE decodedXor = decodeDirect(xorMode);
-    if (decodedXor != MODE::INCONNU) {
-        if (compatConnect) {
-            *compatConnect = true;
-        }
-        return decodedXor;
+    // Boost observé en Confort permanent (0x45). Ne pas accepter des
+    // combinaisons Auto/dérogation/réduit dont le sens n'est pas établi.
+    if ((rawMode & MODE_BIT_BOOST)
+        && (rawMode & ~(MODE_BIT_BOOST | MODE_BIT_ETAT_INTERNE)) != MODE_BIT_CONFORT) {
+        return MODE::INCONNU;
     }
 
-    if (compatConnect) {
-        *compatConnect = false;
+    // Le bit 0x04 est un état interne du satellite : il ne distingue pas
+    // Auto de permanent et n'est pas interprété.
+    const bool confort = (rawMode & MODE_BIT_CONFORT) != 0;
+    if (rawMode & MODE_BIT_DEROGATION) {
+        return confort ? MODE::CONFORT_DEROGATION : MODE::REDUIT_DEROGATION;
     }
-    return MODE::INCONNU;
+    if (rawMode & MODE_BIT_AUTO) {
+        return confort ? MODE::CONFORT_AUTO : MODE::REDUIT_AUTO;
+    }
+    return confort ? MODE::CONFORT_PERMANENT : MODE::REDUIT_PERMANENT;
 }
 
 uint8_t Satellite::encodeModeForSend(Satellite::MODE mode) const {
-    uint8_t rawMode = (uint8_t)mode;
-    if (_modeCompatConnect) {
-        rawMode ^= MODE_CONNECT_COMPAT_XOR;
-    }
-    return rawMode;
+    return (uint8_t)mode;
 }
 
-void Satellite::setModeFromRaw(uint8_t rawMode) {
-    bool compatConnect = false;
-    MODE decodedMode = decodeModeFromRaw(rawMode, &compatConnect);
-    _modeCompatConnect = compatConnect;
+bool Satellite::setModeFromRaw(uint8_t rawMode) {
+    MODE decodedMode = decodeModeFromRaw(rawMode);
 
     if (decodedMode == MODE::INCONNU) {
         char hexMode[5];
         snprintf(hexMode, sizeof(hexMode), "%02X", rawMode);
         warning(String("[SATELLITE Z") + String(getNumeroZone()) + "] Mode satellite inconnu: 0x" + String(hexMode));
-        return;
-    }
-
-    if (_modeCompatConnect) {
-        debug("[SATELLITE Z%d] Mode avec compatibilité Connect détectée (XOR 0x20).", getNumeroZone());
+        return false;
     }
 
     setMode(decodedMode);
+    _zone.setModeOptions((_zone.getModeOptions() & ~MODE_BIT_BOOST) | (rawMode & MODE_BIT_BOOST));
+    return true;
 }

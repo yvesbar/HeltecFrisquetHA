@@ -68,8 +68,9 @@ bool Connect::envoyerZone(Zone& zone) {
         temperature8 temperatureHorsGel;     // Début 5°C -> 0 = 50 = 5°C - MAX Hors gel
         uint8_t mode = 0x00; 
         byte modeOptions = 0b00000100;
-        // Hypothèse : mêmes bits de mode que Satellite::MODE (voir Zone.h).
-        // 0x10 Hors Gel, 0x04 Auto, 0x02 Dérogation, 0x01 Confort.
+        // Même format que l'octet A02F du satellite (voir Zone.h et Satellite.h).
+        // Un Connect réel envoie ici la dernière valeur A02F lue (0x25 en Auto) ;
+        // le firmware conserve 0x04 pour Auto en attendant validation sur chaudière.
         // Boost (0x40) et bits non interprétés conservés par Zone::setMode().
         byte inconnu1 = 0x00;
         Zone::Programmation programmation;
@@ -113,11 +114,46 @@ bool Connect::envoyerZone(Zone& zone) {
             delay(100);
             continue;
         }
-        
+
+        // La réponse attendue confirme l'écriture A154. Publier le mode
+        // envoyé sans attendre un prochain échange du satellite physique.
+        zone.confirmerMode((Zone::MODE_ZONE)payload.mode, payload.modeOptions);
         return true;
     } while(retry++ < 1);
 
     return false;
+}
+
+bool Connect::recupererVersionFirmware() {
+    if (getConfig().useConnectPassive() || !estAssocie()) return false;
+
+    _boilerFirmware = BoilerFirmware();
+    byte response[sizeof(FrisquetRadio::RadioTrameHeader) + 1 + 4] = {};
+    size_t length = sizeof(response);
+    const int16_t result = this->radio().sendAsk(
+        this->getId(), ID_CHAUDIERE, this->getIdAssociation(),
+        this->incrementIdMessage(), 0x01, 0x7541, 0x0002,
+        response, length, 1);
+    if (result != RADIOLIB_ERR_NONE || !setVersionFirmware(response, length)) {
+        error("[CONNECT] Version chaudière indisponible ou invalide (code=%d) : puissances divisées par 10.", result);
+        return false;
+    }
+    return true;
+}
+
+bool Connect::setVersionFirmware(const byte* response, size_t length) {
+    const size_t prefixLength = sizeof(FrisquetRadio::RadioTrameHeader) + 1;
+    BoilerFirmware version;
+    if (!response || length != prefixLength + 4 || response[prefixLength - 1] != 4
+        || !version.decode(response + prefixLength, 4)) return false;
+
+    // Une lecture quotidienne invalide ne remplace pas une version déjà connue.
+    _boilerFirmware = version;
+    info("[CONNECT] Firmware chaudière %02u.%02u.%04u : puissances %s.",
+         static_cast<unsigned>(_boilerFirmware.major), static_cast<unsigned>(_boilerFirmware.minor),
+         static_cast<unsigned>(_boilerFirmware.build),
+         _boilerFirmware.directPower() ? "en kW directs" : "divisées par 10");
+    return true;
 }
 
 bool Connect::recupererInformations() {
@@ -205,8 +241,10 @@ bool Connect::recupererInformations() {
         setTemperatureECS(buff.temperatureECS.toFloat());
         setTemperatureCDC(buff.temperatureCDC.toFloat());
         _chaudiere.setTemperatureFumees(buff.temperatureFumees.toFloat()/2);
-        _chaudiere.setPuissanceInstantaneeECS(buff.puissanceInstantaneeECS.toFloat());
-        _chaudiere.setPuissanceInstantaneeChauffage(buff.puissanceInstantaneeChauffage.toFloat());
+        _chaudiere.setPuissanceInstantaneeECS(_boilerFirmware.power(
+            uint16_t(buff.puissanceInstantaneeECS.bytes[0]) << 8 | buff.puissanceInstantaneeECS.bytes[1]));
+        _chaudiere.setPuissanceInstantaneeChauffage(_boilerFirmware.power(
+            uint16_t(buff.puissanceInstantaneeChauffage.bytes[0]) << 8 | buff.puissanceInstantaneeChauffage.bytes[1]));
         _chaudiere.setModeFonctionnement(buff.modeFonctionnement.toUInt16());
 
         setPression(buff.pression.toFloat());
@@ -513,6 +551,10 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
     auto addrIsConsommation = adresseMemoire == addrConsommation || adresseMemoire == (addrConsommation + 0x00C8);
     auto addrIsDate = adresseMemoire == addrDate;
 
+    if (adresseMemoire == 0x7541) {
+        return setVersionFirmware(buff, length);
+    }
+
     if (addrIsInformations) {
         debug("[CONNECT] Réception des informations passives du Connect.");
         struct {
@@ -607,8 +649,10 @@ bool Connect::handlePassiveReadResponse(uint16_t adresseMemoire, const byte* buf
         getZone2().setTemperatureDepart(resp.temperatureDepartZ2.toFloat());
         getZone3().setTemperatureDepart(resp.temperatureDepartZ3.toFloat());
         _chaudiere.setTemperatureFumees(resp.temperatureFumees.toFloat() / 2);
-        _chaudiere.setPuissanceInstantaneeECS(resp.puissanceInstantaneeECS.toFloat());
-        _chaudiere.setPuissanceInstantaneeChauffage(resp.puissanceInstantaneeChauffage.toFloat());
+        _chaudiere.setPuissanceInstantaneeECS(_boilerFirmware.power(
+            uint16_t(resp.puissanceInstantaneeECS.bytes[0]) << 8 | resp.puissanceInstantaneeECS.bytes[1]));
+        _chaudiere.setPuissanceInstantaneeChauffage(_boilerFirmware.power(
+            uint16_t(resp.puissanceInstantaneeChauffage.bytes[0]) << 8 | resp.puissanceInstantaneeChauffage.bytes[1]));
         setPression(resp.pression.toFloat());
         _chaudiere.setModeFonctionnement(resp.modeFonctionnement.toUInt16());
 
@@ -845,9 +889,12 @@ void Connect::loop() {
     if (getConfig().useConnectPassive() || !estAssocie()) return;
 
     // Exception au planning : une collecte complète au démarrage, même dans
-    // une fenêtre réservée. Les échecs seront repris aux créneaux ordinaires.
+    // une fenêtre réservée. Seules les mesures seront reprises aux créneaux
+    // ordinaires ; la version n'est demandée qu'une fois par démarrage.
     if (_initialReadPending) {
         _initialReadPending = false;
+        recupererVersionFirmware();
+        delay(100);
         info("[CONNECT] Récupération initiale des informations...");
         if (recupererInformations()) {
             _lastRecuperationTemperatures = millis();

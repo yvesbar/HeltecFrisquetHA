@@ -27,6 +27,16 @@ de récupérer les informations en temps réel et de les exposer à **Home Assis
     - Confort
   - **Sélection du mode actif** (Auto, Confort, Réduit, Hors Gel)
 
+En Connect virtuel actif, la version du firmware chaudière est lue une seule
+fois au démarrage (après association), à l'adresse `0x7541` sur deux mots BCD.
+Les puissances instantanées ECS et chauffage sont divisées par 10 avant
+`19.02.0000`, et interprétées directement en kW à partir de cette version.
+Une lecture impossible ou invalide conserve la division par 10 et produit un
+message dans les journaux. Cette règle de version reste à confirmer sur matériel ;
+en mode Connect passif, la même règle est appliquée dès que la lecture de
+`0x7541` par la box physique est captée. En attendant, la division par 10 est
+conservée. Aucune requête supplémentaire n’est émise en passif.
+
 ### 🌡️ Emulation de la sonde extérieure
 Deux modes possibles :
 - Lecture **réelle** via une sonde **DS18B20**
@@ -63,8 +73,11 @@ Deux modes possibles :
 - Lecture de zones mémoire (debug)
 
 Les pages du portail se trouvent dans le dossier **`web/`**. Lors d'une compilation
-PlatformIO, `tools/generate_web_assets.py` les transforme automatiquement en
-ressources C++ stockées dans le firmware.
+PlatformIO, le script `tools/generate_web_assets.py` les transforme en ressources
+C++ stockées dans le firmware : il y remplace le marqueur
+`{{OPENFRISQUETVISIO_VERSION}}` par la version du firmware, c’est-à-dire la date
+et l’heure de compilation au format `AA.MM.JJ.HHmm`, puis les compresse en gzip.
+Cette version s’affiche en bas des pages.
 
 La programmation est envoyée avec le bloc complet de configuration de la zone au
 prochain cycle du Connect. Son utilisation nécessite le mode Auto ; enregistrer
@@ -76,7 +89,21 @@ Les tests du codage des demi-heures et de la sauvegarde se lancent avec
 `python3 tests/test_programming_state.py` (compilateur C++ requis).
 
 ### 🔁 Mise à jour OTA
-- Mise à jour du firmware directement via WiFi
+- Portail : **Paramètres → Système → Mise à jour du firmware**.
+- ArduinoOTA (port 3232) utilise le mot de passe du portail. Changez `admin`
+  pour protéger les deux accès.
+
+Téléchargez [`espota.py`](https://github.com/espressif/arduino-esp32/blob/master/tools/espota.py)
+avec le bouton **Download raw file**, puis lancez-le depuis un terminal.
+Le script demande le mot de passe du portail :
+
+```bash
+python3 /chemin/vers/espota.py -i 192.168.1.184 -f .pio/build/heltec_wifi_lora_32_V3/firmware.bin
+```
+
+Adaptez le chemin, l’adresse et l’environnement de compilation.
+`pio run -t upload` utilise le script fourni par PlatformIO ; les anciennes
+versions ne proposent pas cette saisie du mot de passe.
 
 ---
 
@@ -112,17 +139,54 @@ Avant le flash :
 - Compiler et téléverser avec **PlatformIO**
 - Au premier démarrage, le module crée un **point d’accès WiFi**
 
+Les environnements Heltec sont `heltec_wifi_lora_32_V3`,
+`heltec_wifi_lora_32_V4` et `heltec_wifi_lora_32_V4_3`. Pour compiler une seule
+variante, utiliser `pio run -e <environnement>`. La V4.3 active le front-end
+KCT8103L. Les V4 et V4.3 utilisent explicitement `default_16MB.csv`, avec deux
+partitions applicatives pour les mises à jour OTA. Si la carte utilise un autre
+partitionnement, effectuer un flash USB pour installer cette table avant les
+mises à jour OTA.
+
+La CI compile les quatre variantes sur les PR et les pushes vers `main` et
+`develop`. Les compilations Heltec V3, V4, V4.3 et LilyGo LoRa32 V2.1 ont chacune
+leur propre contrôle GitHub, dans une même matrice. Les tests Python et Node
+utilisent un contrôle séparé.
+
+Après un push sur `main`, la CI publie automatiquement une Release uniquement
+si les tests et les quatre compilations réussissent. Les PR et les pushes sur
+`develop` ne publient pas de Release. Le titre et le tag reprennent la version
+des firmwares, par exemple `26.11.09.1830`, et le tag pointe vers le commit exact
+compilé. La CI fixe cette version une seule fois, à l'heure de Paris, pour les
+quatre cartes : elle correspond aussi à la version embarquée et affichée dans
+le portail. Une Release existante portant ce tag n'est pas écrasée.
+
+Les fichiers sont accessibles dans [Releases](https://github.com/FreedomNX/OpenFrisquetVisio/releases) :
+
+| Carte | Binaire |
+|---|---|
+| Heltec V3 | `firmware-heltec_wifi_lora_32_V3.bin` |
+| Heltec V4 | `firmware-heltec_wifi_lora_32_V4.bin` |
+| Heltec V4.3 | `firmware-heltec_wifi_lora_32_V4_3.bin` |
+| LilyGo LoRa32 V2.1 | `firmware-ttgo_lora32_v21.bin` |
+
+Le fichier `SHA256SUMS` accompagne les binaires. Ils sont destinés aux mises à
+jour applicatives (OTA) ; ils ne contiennent ni le bootloader ni la table de
+partitions nécessaires pour un premier flash USB.
+
 ---
 
 ### Variante LilyGo/TTGO LoRa32 V2.1 (SX1276)
 
 Le support reprend le brochage de la [PR #20 de Julien Hammer](https://github.com/FreedomNX/OpenFrisquetVisio/pull/20), adapté à RadioLib 7.8.1 et à la gestion actuelle de réception. Il cible la LoRa32 V2.1 avec **SX1276 en 868 MHz** ; les autres cartes LilyGo peuvent avoir un brochage différent.
 
-La configuration [platformio.lilygo.ini](platformio.lilygo.ini) importe les réglages communs de votre `platformio.ini` local et remplace la carte, les dépendances Heltec et le mode de téléversement. Elle utilise un partitionnement avec OTA et un premier flash USB :
+L'environnement `ttgo_lora32_v21` est défini dans [platformio.ini](platformio.ini).
+Il partage les réglages communs et remplace la carte, les dépendances Heltec et
+le mode de téléversement. Il utilise un partitionnement avec OTA et un premier
+flash USB. La Heltec V3 reste l'environnement par défaut :
 
 ```sh
-pio run --project-conf platformio.lilygo.ini -e ttgo_lora32_v21
-pio run --project-conf platformio.lilygo.ini -e ttgo_lora32_v21 -t upload
+pio run -e ttgo_lora32_v21
+pio run -e ttgo_lora32_v21 -t upload
 ```
 
 | Signal | GPIO LilyGo |
@@ -132,7 +196,7 @@ pio run --project-conf platformio.lilygo.ini -e ttgo_lora32_v21 -t upload
 | Radio DIO0 / DIO1 | 26 / 33 |
 | DS18B20 | 13 (microSD inutilisée) |
 
-La bande RX par défaut est **250 kHz** sur SX1276 ; les paramètres du portail proposent les bandes propres à cette puce. Le journal contient au maximum **120 lignes**, pour limiter la RAM statique de l'ESP32 classique.
+La bande RX par défaut est **250 kHz** sur SX1276 ; les paramètres du portail proposent les bandes propres à cette puce. Le journal contient au maximum **80 lignes**, et le tampon d'affichage est limité à cette même capacité pour conserver une marge de RAM statique sur l'ESP32 classique, y compris avec la chaîne GCC 14 utilisée par la CI.
 
 La FIFO FSK du SX1276 ne contient que **64 octets**. La réception utilise donc le format variable : un octet de longueur et jusqu'à **63 octets de données**, avec validation matérielle du CRC CCITT (init `0x1D0F`, polynôme `0x1021`, complémenté). Les trames CRC invalides sont journalisées et rejetées. Le CRC reçu est retiré par la puce : la capture brute de 68 octets et la réparation logicielle du SX1262 ne sont pas disponibles sur cette variante. Voir la [documentation Semtech, sections FIFO et CRC](https://cdn.sparkfun.com/assets/7/7/3/2/2/SX1276_Datasheet.pdf).
 
@@ -236,4 +300,4 @@ Mais bon, si ça marche, vous pouvez toujours m’offrir un café ☕ 😉
 **Année :** 2025  
 **Plateforme :** ESP32 (Heltec WiFi LoRa 32, SX1262)  
 **Compatibilité :** Home Assistant, MQTT, Frisquet Chaudière série Eco Radio Visio  
-**Version :** 26.10.27.1007
+**Version :** 26.11.09.2010
